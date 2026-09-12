@@ -1,0 +1,581 @@
+#!/usr/bin/env bash
+# =============================================================================
+# PushNova Ops · 服务器运维推送工具（主入口）
+#
+#   一键安装：  curl -fsSL <install.sh 地址> | bash
+#   安装向导：  pushnova-ops install
+#   立即巡检：  pushnova-ops report
+#   异常检测：  pushnova-ops check
+#   手动发送：  pushnova-ops send -t "标题" -m "正文"
+#   环境自检：  pushnova-ops doctor
+#
+# 所有配置保存在 /etc/pushnova-ops/ops.conf（普通用户为 ~/.config/pushnova-ops/ops.conf）
+# =============================================================================
+set -euo pipefail
+
+PN_OPS_VERSION="1.0.0"
+PN_OPS_SELFDIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo .)
+if [ -d "$PN_OPS_SELFDIR/lib" ]; then
+  : "${PUSHNOVA_OPS_HOME:=$PN_OPS_SELFDIR}"
+fi
+export PN_OPS_SELFDIR
+export PUSHNOVA_OPS_HOME="${PUSHNOVA_OPS_HOME:-}"
+
+PN_LIB_DIR=""
+for _cand in "${PUSHNOVA_OPS_HOME:-}/lib" "$PN_OPS_SELFDIR/lib" /usr/local/lib/pushnova-ops /opt/pushnova-ops/lib; do
+  [ -n "$_cand" ] || continue
+  if [ -f "$_cand/common.sh" ]; then PN_LIB_DIR=$_cand; break; fi
+done
+[ -n "$PN_LIB_DIR" ] || { echo "错误：找不到 PushNova Ops 函数库（lib/common.sh）" >&2; exit 1; }
+
+# shellcheck source=/dev/null
+. "$PN_LIB_DIR/common.sh"
+# shellcheck source=/dev/null
+. "$PN_LIB_DIR/config.sh"
+# shellcheck source=/dev/null
+. "$PN_LIB_DIR/metrics.sh"
+# shellcheck source=/dev/null
+. "$PN_LIB_DIR/rules.sh"
+# shellcheck source=/dev/null
+. "$PN_LIB_DIR/payload.sh"
+# shellcheck source=/dev/null
+. "$PN_LIB_DIR/notify.sh"
+# shellcheck source=/dev/null
+. "$PN_LIB_DIR/schedule.sh"
+# shellcheck source=/dev/null
+. "$PN_LIB_DIR/wizard.sh"
+
+# ---------------------------------------------------------------------------
+# 参数解析（命令行 > 环境变量 > 配置文件 > 默认值）
+# ---------------------------------------------------------------------------
+PN_FLAG_JSON=0
+PN_FLAG_YES=0
+PN_FLAG_NO_TEST=0
+PN_FLAG_FORCE=0
+PN_FLAG_PURGE=0
+PN_FLAG_TEMPLATE=""
+PN_FLAG_TITLE=""
+PN_FLAG_MESSAGE=""
+PN_FLAG_TYPE=""
+PN_CMD=""
+PN_ARGS=""
+PN_TAIL=""
+
+pn_usage() {
+  cat <<EOF
+$(pn_c bold 'PushNova Ops v'"$PN_OPS_VERSION") · 服务器运维监控推送工具
+
+$(pn_c bold '用法')
+  $PN_OPS_NAME <命令> [选项]
+
+$(pn_c bold '命令')
+  install, wizard      运行命令行安装向导（Token → 推送方式 → 指标 → 定时）
+  report               立即巡检本机并推送报告
+  check                立即做一次异常检测（仅在异常/恢复时推送）
+  run                  一次采集，同时执行报告与异常检测
+  send                 手动发送一条消息（-t 标题 -m 正文）
+  test                 发送一条测试推送
+  collect              只采集并打印指标，不推送
+  targets              列出账号下的手机 / 频道 / 群组
+  config               配置管理：show | path | get KEY | set KEY VALUE | edit
+  cron                 定时任务：install | remove | status
+  logs                 查看运行日志（--push 查看推送记录）
+  flush                重投之前发送失败的暂存报文
+  doctor               环境自检（依赖 / 网络 / Token / 定时任务）
+  uninstall            卸载（--purge 同时删除配置与状态）
+  version | help
+
+$(pn_c bold '常用选项')
+  --api-key <pn_ak_...>      发送者 Token（发信 API Key）
+  --gateway <url>            网关地址，默认 https://pushnova.ezcloud.ltd/v1
+  --target-mode <mode>       device | topic | group | account
+  --target <值>              设备 Token / 频道名 / 群组名
+  --metrics "<列表>"         监控指标，如 "load cpu mem disk"
+  --report-template <名称>   standard | rich | metric | table | compact
+  --alert-template <名称>    storm | standard | rich | compact
+  --priority <级别>          NORMAL | HIGH | EMERGENCY
+  --interval <分钟>          异常监测间隔
+  --scheduler <方式>         cron | systemd | none | auto
+  --proxy <url>              推送走代理（内网机器常用）
+  --dry-run                  只打印报文，不真正发送
+  --quiet                    静默模式（适合 cron，仅写日志）
+  --json                     以 JSON 输出采集结果
+  -y, --yes                  非交互确认（用于 CI / 批量部署）
+  --no-test                  安装时跳过测试推送
+  --no-schedule              安装时不创建定时任务
+  -h, --help                 显示帮助
+
+$(pn_c bold '示例')
+  # 一键安装（交互向导）
+  curl -fsSL https://raw.githubusercontent.com/netproxy/pushnova/main/ops/install.sh | bash
+
+  # 非交互安装：推送到频道 ops_alerts，每 5 分钟检测、每天 9 点报告
+  $PN_OPS_NAME install -y --api-key pn_ak_live_xxx --target-mode topic --target ops_alerts \\
+      --metrics "load cpu mem disk conn service log" --scheduler cron
+
+  # 手动发一条紧急通知
+  $PN_OPS_NAME send -t "数据库主从切换" -m "已完成切换，请复核" --priority EMERGENCY
+
+  # 发送审批卡片（HITL）
+  $PN_OPS_NAME send -t "是否重启 nginx" -m "内存占用持续偏高" --type hitl \\
+      --actions "APPROVE:同意重启:PRIMARY,REJECT:暂不处理:DESTRUCTIVE" --timeout 300
+EOF
+}
+
+pn_parse_args() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --api-key|--token|--api-key=*)
+        case "$1" in
+          *=*) PN_OPS_API_KEY=${1#*=}; shift ;;
+          *) PN_OPS_API_KEY=${2:-}; shift 2 ;;
+        esac ;;
+      --gateway) PN_OPS_GATEWAY=${2:-}; shift 2 ;;
+      --target-mode) PN_OPS_TARGET_MODE=${2:-}; shift 2 ;;
+      --target) PN_OPS_TARGET=${2:-}; shift 2 ;;
+      --metrics) PN_OPS_METRICS=${2:-}; shift 2 ;;
+      --report-template) PN_OPS_REPORT_TEMPLATE=${2:-}; shift 2 ;;
+      --alert-template) PN_OPS_ALERT_TEMPLATE=${2:-}; shift 2 ;;
+      --recovery-template) PN_OPS_RECOVERY_TEMPLATE=${2:-}; shift 2 ;;
+      --priority) PN_OPS_PRIORITY_ALERT=${2:-}; shift 2 ;;
+      --interval) PN_OPS_ALERT_INTERVAL_MIN=${2:-}; shift 2 ;;
+      --repeat) PN_OPS_ALERT_REPEAT_MIN=${2:-}; shift 2 ;;
+      --report-cron) PN_OPS_REPORT_CRON=${2:-}; shift 2 ;;
+      --alert-cron) PN_OPS_ALERT_CRON=${2:-}; shift 2 ;;
+      --scheduler) PN_OPS_SCHEDULER=${2:-}; shift 2 ;;
+      --proxy) PN_OPS_PROXY=${2:-}; shift 2 ;;
+      --services) PN_OPS_SERVICES=${2:-}; shift 2 ;;
+      --ports) PN_OPS_PORTS=${2:-}; shift 2 ;;
+      --urls) PN_OPS_HTTP_URLS=${2:-}; shift 2 ;;
+      --ping) PN_OPS_PING_HOSTS=${2:-}; shift 2 ;;
+      --cert) PN_OPS_CERT_HOSTS=${2:-}; shift 2 ;;
+      --keywords) PN_OPS_LOG_KEYWORDS=${2:-}; shift 2 ;;
+      --category) PN_OPS_CATEGORY=${2:-}; shift 2 ;;
+      --thresholds) PN_OPS_THRESHOLDS=${2:-}; shift 2 ;;
+      --title|-t) PN_FLAG_TITLE=${2:-}; shift 2 ;;
+      --message|-m) PN_FLAG_MESSAGE=${2:-}; shift 2 ;;
+      --template|-T) PN_FLAG_TEMPLATE=${2:-}; shift 2 ;;
+      --type) PN_FLAG_TYPE=${2:-}; shift 2 ;;
+      --actions) PN_MANUAL_ACTIONS=${2:-}; shift 2 ;;
+      --callback) PN_MANUAL_CALLBACK=${2:-}; shift 2 ;;
+      --timeout) PN_MANUAL_TIMEOUT=${2:-}; shift 2 ;;
+      --dry-run) PN_OPS_DRY_RUN=1; shift ;;
+      --quiet|-q) PN_OPS_QUIET=1; shift ;;
+      --json) PN_FLAG_JSON=1; shift ;;
+      --yes|-y|--non-interactive) PN_FLAG_YES=1; shift ;;
+      --no-test) PN_FLAG_NO_TEST=1; shift ;;
+      --no-schedule) PN_OPS_SCHEDULER=none; shift ;;
+      --force|-f) PN_FLAG_FORCE=1; shift ;;
+      --purge) PN_FLAG_PURGE=1; shift ;;
+      --verbose|-v) PN_OPS_LOG_LEVEL=debug; shift ;;
+      -h|--help) pn_usage; exit 0 ;;
+      --version|-V) echo "$PN_OPS_NAME v$PN_OPS_VERSION"; exit 0 ;;
+      -*) pn_error "未知选项：$1（使用 --help 查看帮助）"; exit 2 ;;
+      *)
+        if [ -z "$PN_CMD" ]; then PN_CMD=$1; else PN_TAIL="$PN_TAIL $1"; fi
+        shift ;;
+    esac
+  done
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# 采集与推送流程
+# ---------------------------------------------------------------------------
+pn_history_push_all() {
+  local kind id label value unit detail
+  while IFS="$(printf '\t')" read -r kind id label value unit detail; do
+    [ "$kind" = "NUM" ] || continue
+    pn_history_push "$id" "$value"
+  done <<EOF
+$(pn_results_num)
+EOF
+  return 0
+}
+
+pn_severity_priority() {
+  local sev=$1
+  case "$sev" in
+    crit) printf '%s' "${PN_OPS_PRIORITY_CRITICAL:-EMERGENCY}" ;;
+    warn) printf '%s' "${PN_OPS_PRIORITY_ALERT:-HIGH}" ;;
+    *)    printf '%s' "${PN_OPS_PRIORITY_REPORT:-NORMAL}" ;;
+  esac
+}
+
+pn_flow_collect_eval() {
+  pn_rotate_log
+  pn_collect_all "${PN_OPS_METRICS:-load cpu mem disk}"
+  pn_rules_evaluate
+  pn_history_push_all
+  return 0
+}
+
+pn_flow_push_report() {
+  local tpl=${PN_FLAG_TEMPLATE:-${PN_OPS_REPORT_TEMPLATE:-standard}}
+  local payload priority
+  priority=$(pn_severity_priority "$PN_OVERALL")
+  payload=$(pn_build_payload report "$tpl" "$priority") || return 1
+  pn_notify_send "$payload" report
+}
+
+pn_flow_push_alert() {
+  # pn_flow_push_alert [force]
+  local force=${1:-0} tpl payload priority kinds count
+  kinds=$(awk -F'\t' '$1=="ALERT"||$1=="REPEAT"{c++} END{print c+0}' "$PN_DECISIONS" 2>/dev/null)
+  case "$kinds" in ''|*[!0-9]*) kinds=0 ;; esac
+  if [ "$kinds" -eq 0 ]; then
+    local recs
+    recs=$(awk -F'\t' '$1=="RECOVERY"{c++} END{print c+0}' "$PN_DECISIONS" 2>/dev/null)
+    case "$recs" in ''|*[!0-9]*) recs=0 ;; esac
+    if [ "$recs" -gt 0 ] && pn_bool "${PN_OPS_NOTIFY_RECOVERY:-1}"; then
+      tpl=${PN_OPS_RECOVERY_TEMPLATE:-standard}
+      [ "$tpl" = "off" ] && return 0
+      payload=$(pn_build_payload recovery "$tpl" "${PN_OPS_PRIORITY_REPORT:-NORMAL}" "$recs") || return 1
+      pn_notify_send "$payload" recovery
+      return $?
+    fi
+    if [ "$force" != "1" ]; then
+      pn_info "本次无需推送，静默（无新增异常，或仍在重复提醒冷却期内）"
+      return 0
+    fi
+    tpl=${PN_FLAG_TEMPLATE:-${PN_OPS_ALERT_TEMPLATE:-standard}}
+    payload=$(pn_build_payload report "$tpl" "${PN_OPS_PRIORITY_REPORT:-NORMAL}") || return 1
+    pn_notify_send "$payload" report
+    return $?
+  fi
+  count=$(awk -F'\t' '$1=="ALERT"||$1=="REPEAT"{ if ($6+0 > m) m=$6+0 } END{ print (m>0?m:1) }' "$PN_DECISIONS" 2>/dev/null)
+  case "$count" in ''|*[!0-9]*) count=1 ;; esac
+  tpl=${PN_FLAG_TEMPLATE:-${PN_OPS_ALERT_TEMPLATE:-storm}}
+  priority=$(pn_severity_priority "$PN_OVERALL")
+  payload=$(pn_build_payload alert "$tpl" "$priority" "$count") || return 1
+  pn_notify_send "$payload" alert
+}
+
+# ---------------------------------------------------------------------------
+# 命令实现
+# ---------------------------------------------------------------------------
+cmd_install() {
+  pn_wizard_run
+}
+
+cmd_report() {
+  pn_lock report || return 0
+  pn_flow_collect_eval
+  if [ "$PN_FLAG_JSON" = "1" ]; then
+    pn_collect_print_json
+  elif ! pn_bool "${PN_OPS_QUIET:-0}"; then
+    pn_format_lines
+    printf '\n%s\n' "$(pn_c bold "概览：$(pn_findings_counts)")"
+  fi
+  pn_ok "巡检完成：$(pn_findings_counts)"
+  pn_flow_push_report
+  pn_unlock
+}
+
+cmd_check() {
+  pn_lock check || return 0
+  pn_flow_collect_eval
+  if [ "$PN_FLAG_JSON" = "1" ]; then
+    pn_collect_print_json
+  elif ! pn_bool "${PN_OPS_QUIET:-0}"; then
+    pn_format_lines
+  fi
+  if [ "$PN_FLAG_FORCE" = "1" ]; then
+    pn_flow_push_alert 1
+  else
+    pn_flow_push_alert 0
+  fi
+  pn_unlock
+}
+
+cmd_run() {
+  pn_lock run || return 0
+  pn_flow_collect_eval
+  if ! pn_bool "${PN_OPS_QUIET:-0}"; then pn_format_lines; fi
+  pn_flow_push_report || pn_warn "报告推送失败"
+  pn_flow_push_alert 0 || pn_warn "告警推送失败"
+  pn_unlock
+}
+
+cmd_collect() {
+  pn_flow_collect_eval
+  if [ "$PN_FLAG_JSON" = "1" ]; then
+    pn_collect_print_json
+  else
+    pn_format_lines
+    printf '\n%s\n' "$(pn_c bold "概览：$(pn_findings_counts)")"
+  fi
+}
+
+pn_collect_print_json() {
+  local out="{"
+  out="$out\"host\":$(pn_json_str "$(pn_hostname)")"
+  out="$out,\"time\":$(pn_json_str "$(pn_time_str)")"
+  out="$out,\"overall\":$(pn_json_str "$PN_OVERALL")"
+  out="$out,\"crit\":$PN_CRIT_COUNT,\"warn\":$PN_WARN_COUNT,\"ok\":$PN_OK_COUNT,\"na\":$PN_NA_COUNT"
+  out="$out,\"metrics\":$(pn_build_metrics_json)"
+  out="$out,\"table\":$(pn_build_table_json)"
+  out="$out}"
+  if pn_have jq; then printf '%s\n' "$out" | jq . 2>/dev/null || printf '%s\n' "$out"
+  else printf '%s\n' "$out"; fi
+}
+
+cmd_send() {
+  local title=${PN_FLAG_TITLE:-} message=${PN_FLAG_MESSAGE:-}
+  if [ -z "$title" ] && pn_has_tty; then
+    title=$(pn_read_line "通知标题" "PushNova Ops 通知")
+  fi
+  [ -n "$title" ] || title="PushNova Ops 通知"
+  if [ -z "$message" ] && pn_has_tty; then
+    message=$(pn_read_line "通知正文" "")
+  fi
+  [ -n "$message" ] || message="$title"
+  PN_MANUAL_TITLE=$title
+  PN_MANUAL_MESSAGE=$message
+  local tpl=${PN_FLAG_TEMPLATE:-manual}
+  if [ -n "${PN_FLAG_TYPE:-}" ]; then
+    case "$PN_FLAG_TYPE" in
+      hitl|HITL) tpl=hitl ;;
+      metric) tpl=metric ;;
+      table|structured_table) tpl=table ;;
+      rich|markdown) tpl=rich ;;
+      *) tpl=manual ;;
+    esac
+  fi
+  PN_OVERALL=${PN_OVERALL:-ok}
+  if [ "$tpl" = "hitl" ]; then
+    PN_MANUAL_ACTIONS_HINT="（支持在手机上直接点击按钮，结果会回调你的 callback_url）"
+  fi
+  local payload
+  payload=$(pn_build_payload manual "$tpl" "${PN_FLAG_PRIORITY_OVERRIDE:-${PN_OPS_PRIORITY_ALERT:-HIGH}}") || return 1
+  pn_notify_send "$payload" manual
+}
+
+cmd_test() {
+  pn_notify_selftest "${PN_FLAG_TEMPLATE:-test}"
+}
+
+cmd_targets() {
+  pn_info "正在读取账号信息 ..."
+  if ! pn_api_stats; then
+    pn_error "无法获取账号信息（HTTP $PN_HTTP_CODE）"
+    return 1
+  fi
+  local body=$PN_HTTP_BODY
+  if ! pn_have jq; then
+    pn_warn "未安装 jq，仅显示原始返回："
+    printf '%s\n' "$body"
+    return 0
+  fi
+  printf '\n%s\n' "$(pn_c bold '账号')"
+  printf '  套餐：%s · 今日已发：%s · 设备：%s 台\n' \
+    "$(printf '%s' "$body" | jq -r '.tier // "-"')" \
+    "$(printf '%s' "$body" | jq -r '.dispatched_today // 0')" \
+    "$(printf '%s' "$body" | jq -r '(.devices // []) | length')"
+  printf '\n%s\n' "$(pn_c bold '手机（--target-mode device --target <token>）')"
+  printf '%s' "$body" | jq -r '(.devices // [])[] | "  \(.device_name // "未命名")\t\(.device_token)\t[\(.group_name // "-")]"' 2>/dev/null || true
+  printf '\n%s\n' "$(pn_c bold '频道（--target-mode topic --target <name>）')"
+  printf '%s' "$body" | jq -r '(.topics // [])[] | "  \(.)"' 2>/dev/null || true
+  printf '\n%s\n' "$(pn_c bold '群组（--target-mode group --target <name>）')"
+  printf '%s' "$body" | jq -r '[(.devices // [])[] | (.group_name // empty)] | unique | .[] | "  \(.)"' 2>/dev/null || true
+  printf '\n'
+}
+
+cmd_config() {
+  local sub=${1:-show}
+  case "$sub" in
+    show|"") pn_conf_show ;;
+    path) pn_conf_path ;;
+    get)
+      local k=${2:?用法: $PN_OPS_NAME config get PN_OPS_XXX}
+      pn_var_get "$k" ;;
+    set)
+      local k=${2:?用法: $PN_OPS_NAME config set PN_OPS_XXX 值}
+      shift 2
+      pn_conf_set "$k" "$*" && pn_ok "已更新 $k"
+      ;;
+    edit|wizard) pn_wizard_run ;;
+    *) pn_error "未知子命令：config $sub"; return 2 ;;
+  esac
+}
+
+cmd_cron() {
+  local sub=${1:-status}
+  case "$sub" in
+    install) PN_OPS_SCHEDULER=${PN_OPS_SCHEDULER:-auto}; [ "$PN_OPS_SCHEDULER" = "none" ] && PN_OPS_SCHEDULER=auto; pn_schedule_install ;;
+    remove|uninstall) pn_schedule_remove ;;
+    status|"") pn_schedule_status ;;
+    *) pn_error "未知子命令：cron $sub"; return 2 ;;
+  esac
+}
+
+cmd_logs() {
+  local n=50
+  case "${1:-}" in
+    *[0-9]*) n=$1 ;;
+  esac
+  if [ "${2:-}" = "--push" ] || [ "${1:-}" = "--push" ]; then
+    tail -n "$n" "$(pn_state_sub logs)/push.log" 2>/dev/null || pn_info "暂无推送记录"
+  else
+    tail -n "$n" "$(pn_log_file)" 2>/dev/null || pn_info "暂无运行日志"
+  fi
+}
+
+cmd_flush() {
+  pn_notify_flush_spool
+}
+
+cmd_doctor() {
+  local fails=0 warns=0
+  pn_banner "PushNova Ops 环境自检 v$PN_OPS_VERSION"
+  printf '  %-22s %s\n' '主机' "$(pn_hostname) · $(pn_primary_ip)"
+  printf '  %-22s %s\n' '系统' "$(pn_os_pretty) · 内核 $(pn_kernel) · $(pn_cores) 核"
+  printf '  %-22s %s\n' '时间 / 时区' "$(pn_time_str) $(date '+%Z' 2>/dev/null || echo '')"
+  printf '  %-22s %s\n' 'Bash 版本' "${BASH_VERSION}"
+  printf '  %-22s %s\n' '当前用户' "$(id -un 2>/dev/null || echo unknown)（$(pn_is_root && echo root || echo 非root)）"
+
+  pn_banner "依赖"
+  local t
+  for t in curl awk sed grep; do
+    if pn_have "$t"; then printf '  %-22s %s\n' "$t" "$(pn_c green 就绪)"
+    else printf '  %-22s %s\n' "$t" "$(pn_c red 缺失)"; fails=$((fails + 1)); fi
+  done
+  for t in jq openssl ping nc smartctl crontab systemctl; do
+    if pn_have "$t"; then printf '  %-22s %s\n' "$t" "$(pn_c green 就绪)"
+    else printf '  %-22s %s\n' "$t" "$(pn_c yellow '未安装（可选）')"; warns=$((warns + 1)); fi
+  done
+
+  pn_banner "配置"
+  printf '  %-22s %s\n' '配置文件' "$(pn_conf_path)"
+  if [ -f "$(pn_conf_path)" ]; then
+    local mode
+    mode=$(ls -l "$(pn_conf_path)" 2>/dev/null | awk '{print $1}')
+    printf '  %-22s %s\n' '文件权限' "$mode"
+    case "$mode" in
+      *rw-------*|*rw-r-----*) ;;
+      *) printf '  %-22s %s\n' '' "$(pn_c yellow '建议 chmod 600 保护 Token')"; warns=$((warns + 1)) ;;
+    esac
+  else
+    printf '  %-22s %s\n' '' "$(pn_c yellow '尚未安装配置，请运行 install')"
+  fi
+  printf '  %-22s %s\n' '状态目录可写' "$(pn_state_dir)"
+  if ! mkdir -p "$(pn_state_dir)" 2>/dev/null; then
+    printf '  %-22s %s\n' '' "$(pn_c red '无法创建状态目录)')"; fails=$((fails + 1))
+  fi
+  printf '  %-22s %s\n' '发送者 Token' "$(pn_masked "${PN_OPS_API_KEY:-未设置}")"
+  printf '  %-22s %s\n' '推送方式' "$(pn_target_desc)"
+  printf '  %-22s %s\n' '监控指标' "${PN_OPS_METRICS:-（空）}"
+
+  pn_banner "网络与鉴权"
+  if pn_bool "${PN_OPS_DRY_RUN:-0}"; then
+    pn_info "dry-run 模式，跳过联网检查"
+  elif [ "${PN_OPS_MOCK:-0}" = "1" ]; then
+    pn_info "mock 模式，跳过联网检查"
+  else
+    if pn_api_health; then
+      printf '  %-22s %s\n' '网关连通' "$(pn_c green "正常（HTTP $PN_HTTP_CODE）")"
+    else
+      printf '  %-22s %s\n' '网关连通' "$(pn_c red "失败（HTTP $PN_HTTP_CODE）：$(printf '%s' "$PN_HTTP_BODY" | cut -c1-80)")"
+      fails=$((fails + 1))
+    fi
+    if pn_token_check; then
+      printf '  %-22s %s\n' 'Token 校验' "$(pn_c green "$PN_TOKEN_SUMMARY")"
+    else
+      printf '  %-22s %s\n' 'Token 校验' "$(pn_c red '失败')"
+      fails=$((fails + 1))
+    fi
+  fi
+
+  pn_banner "采集与报文"
+  pn_collect_all "${PN_OPS_METRICS:-load cpu mem disk}"
+  pn_rules_evaluate
+  printf '  %-22s %s\n' '采集指标数' "$(pn_result_count) 项"
+  printf '  %-22s %s\n' '判定结果' "$(pn_findings_counts)"
+  local payload
+  if payload=$(pn_build_payload report "${PN_OPS_REPORT_TEMPLATE:-standard}" NORMAL); then
+    printf '  %-22s %s\n' '报文构造' "$(pn_c green "成功（$(wc -c <"$payload" | tr -d ' ') 字节）")"
+    pn_debug "payload: $(cat "$payload")"
+  else
+    printf '  %-22s %s\n' '报文构造' "$(pn_c red 失败)"; fails=$((fails + 1))
+  fi
+
+  pn_banner "定时任务"
+  if [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
+    pn_schedule_status_cron
+    pn_schedule_status_systemd
+  else
+    printf '  非 Linux 环境，跳过定时任务检查\n'
+  fi
+
+  pn_hr
+  if [ "$fails" -gt 0 ]; then
+    printf '  %s\n\n' "$(pn_c red "自检未通过：$fails 项失败 / $warns 项提示")"
+    return 1
+  fi
+  printf '  %s\n\n' "$(pn_c green "自检通过（$warns 项可选提示）")"
+  return 0
+}
+
+cmd_uninstall() {
+  pn_banner "卸载 PushNova Ops"
+  pn_info "将移除：定时任务"
+  pn_info "将保留：配置文件与状态目录（加 --purge 一并删除）"
+  if ! pn_bool "$PN_FLAG_YES" && pn_has_tty; then
+    pn_confirm "确认卸载？" n || { pn_info "已取消"; return 0; }
+  fi
+  pn_schedule_remove
+  if [ "$PN_FLAG_PURGE" = "1" ]; then
+    rm -rf "$(pn_state_dir)" 2>/dev/null || true
+    rm -f "$(pn_conf_path)" 2>/dev/null || true
+    pn_ok "已删除状态目录与配置文件"
+  fi
+  local prefix=${PN_OPS_INSTALL_PREFIX:-/opt/pushnova-ops}
+  if [ "$(pn_home)" = "$prefix" ] || [ "$PN_OPS_SELFDIR" = "$prefix" ]; then
+    rm -f /usr/local/bin/pushnova-ops 2>/dev/null || true
+    rm -rf "$prefix" 2>/dev/null || true
+    pn_ok "已删除程序目录 $prefix"
+  fi
+  pn_ok "卸载完成（日志目录 $(pn_log_file) 如已删除则一并清理）"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# 主调度
+# ---------------------------------------------------------------------------
+main() {
+  pn_parse_args "$@"
+  pn_conf_load
+
+  if [ -z "$PN_CMD" ]; then
+    if pn_has_tty; then
+      pn_usage
+      exit 0
+    fi
+    pn_error "缺少命令，使用 --help 查看用法"
+    exit 2
+  fi
+
+  # shellcheck disable=SC2086
+  set -- $PN_TAIL
+  case "$PN_CMD" in
+    install|setup|wizard) cmd_install ;;
+    report|digest)        cmd_report ;;
+    check|alert|monitor)  cmd_check ;;
+    run)                  cmd_run ;;
+    collect|metrics)      cmd_collect ;;
+    send|push)            cmd_send ;;
+    test)                 cmd_test ;;
+    targets|list)         cmd_targets ;;
+    config|conf)          cmd_config "$@" ;;
+    cron|schedule|timer)  cmd_cron "$@" ;;
+    logs|log)             cmd_logs "$@" ;;
+    flush|resend)         cmd_flush ;;
+    doctor|checkup)       cmd_doctor ;;
+    uninstall|remove)     cmd_uninstall ;;
+    version|-V)           echo "$PN_OPS_NAME v$PN_OPS_VERSION" ;;
+    help|-h|--help)       pn_usage ;;
+    *) pn_error "未知命令：$PN_CMD（使用 --help 查看帮助）"; exit 2 ;;
+  esac
+}
+
+main "$@"
