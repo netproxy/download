@@ -1,8 +1,8 @@
 # shellcheck shell=bash
 # =============================================================================
-# PushNova Ops · 定时调度（cron / systemd timer）
+# PushNova Ops · Task Scheduling (cron / systemd timer)
 # =============================================================================
-PN_CRON_BEGIN="# >>> pushnova-ops (managed block · 请勿手工修改) >>>"
+PN_CRON_BEGIN="# >>> pushnova-ops (managed block · do not edit manually) >>>"
 PN_CRON_END="# <<< pushnova-ops (managed block) <<<"
 
 pn_ops_bin() {
@@ -48,7 +48,7 @@ EOF
 }
 
 pn_schedule_install_cron() {
-  pn_cron_available || { pn_error "未检测到 crontab，无法安装 cron 任务"; return 1; }
+  pn_cron_available || { pn_error "crontab not detected, cannot install cron tasks"; return 1; }
   local cur tmp
   cur=$(crontab -l 2>/dev/null || true)
   tmp=$(mktemp 2>/dev/null || echo "$(pn_state_sub run)/crontab.$$")
@@ -56,10 +56,10 @@ pn_schedule_install_cron() {
   {
     cat "$tmp"
     pn_cron_block
-  } | crontab - || { pn_error "写入 crontab 失败"; rm -f "$tmp"; return 1; }
+  } | crontab - || { pn_error "Failed to write crontab"; rm -f "$tmp"; return 1; }
   rm -f "$tmp" 2>/dev/null || true
-  pn_ok "已安装 cron 定时任务"
-  pn_info "报告：${PN_OPS_REPORT_CRON:-0 9 * * *} · 异常监测：${PN_OPS_ALERT_CRON:-*/5 * * * *}"
+  pn_ok "cron scheduled tasks installed"
+  pn_info "Report: ${PN_OPS_REPORT_CRON:-0 9 * * *} · Monitoring: ${PN_OPS_ALERT_CRON:-*/5 * * * *}"
   return 0
 }
 
@@ -69,28 +69,28 @@ pn_schedule_remove_cron() {
   cur=$(crontab -l 2>/dev/null || true)
   case "$cur" in
     *"$PN_CRON_BEGIN"*) ;;
-    *) pn_info "crontab 中没有 pushnova-ops 任务"; return 0 ;;
+    *) pn_info "No pushnova-ops tasks in crontab"; return 0 ;;
   esac
   tmp=$(mktemp 2>/dev/null || echo "$(pn_state_sub run)/crontab.$$")
   printf '%s\n' "$cur" | sed "/$(printf '%s' "$PN_CRON_BEGIN" | sed 's/[][\.*^$/]/\\&/g')/,/$(printf '%s' "$PN_CRON_END" | sed 's/[][\.*^$/]/\\&/g')/d" >"$tmp"
-  crontab "$tmp" 2>/dev/null && pn_ok "已移除 cron 定时任务" || pn_warn "移除 cron 任务失败"
+  crontab "$tmp" 2>/dev/null && pn_ok "cron scheduled tasks removed" || pn_warn "Failed to remove cron tasks"
   rm -f "$tmp" 2>/dev/null || true
   return 0
 }
 
 pn_schedule_status_cron() {
   if ! pn_cron_available; then
-    printf '  %s\n' "cron：不可用（无 crontab 命令）"
+    printf '  %s\n' "cron: not available (missing crontab command)"
     return 0
   fi
   local cur
   cur=$(crontab -l 2>/dev/null || true)
   case "$cur" in
     *"$PN_CRON_BEGIN"*)
-      printf '  %s\n' "$(pn_c green 'cron：已安装')"
+      printf '  %s\n' "$(pn_c green 'cron: installed')"
       printf '%s\n' "$cur" | sed -n "/$(printf '%s' "$PN_CRON_BEGIN" | sed 's/[][\.*^$/]/\\&/g')/,/$(printf '%s' "$PN_CRON_END" | sed 's/[][\.*^$/]/\\&/g')/p" | sed 's/^/    /'
       ;;
-    *) printf '  %s\n' "$(pn_c yellow 'cron：未安装 pushnova-ops 任务')" ;;
+    *) printf '  %s\n' "$(pn_c yellow 'cron: pushnova-ops tasks not installed')" ;;
   esac
 }
 
@@ -98,7 +98,7 @@ pn_schedule_status_cron() {
 # systemd timer
 # ---------------------------------------------------------------------------
 pn_cron_to_oncalendar() {
-  # 支持 M H * * * / M */N * * * / */M * * * * 三类常见表达式
+  # Supports M H * * * / M */N * * * / */M * * * * common expressions
   local expr=$1 m h dom mon dow
   set -- $expr
   m=${1:-0}; h=${2:-9}; dom=${3:-*}; mon=${4:-*}; dow=${5:-*}
@@ -123,11 +123,11 @@ pn_cron_to_oncalendar() {
 }
 
 pn_schedule_install_systemd() {
-  pn_schedule_has_systemd || { pn_error "当前系统未运行 systemd，无法安装 timer"; return 1; }
+  pn_schedule_has_systemd || { pn_error "systemd is not running on this host, cannot install timer"; return 1; }
   local bin dir oncal_report
   bin=$(pn_ops_bin)
   dir=/etc/systemd/system
-  [ -w "$dir" ] || { pn_error "没有 $dir 写权限（请用 root 执行）"; return 1; }
+  [ -w "$dir" ] || { pn_error "No write permission on $dir (please run as root)"; return 1; }
   oncal_report=$(pn_cron_to_oncalendar "${PN_OPS_REPORT_CRON:-0 9 * * *}")
   local envline="Environment=PUSHNOVA_OPS_CONF=$(pn_conf_path)"
   [ -n "${PUSHNOVA_OPS_STATE:-}" ] && envline="$envline
@@ -135,7 +135,7 @@ Environment=PUSHNOVA_OPS_STATE=$(pn_state_dir)"
 
   cat >"$dir/pushnova-ops-report.service" <<EOF
 [Unit]
-Description=PushNova Ops 巡检报告推送
+Description=PushNova Ops Inspection Report Dispatch
 After=network-online.target
 
 [Service]
@@ -147,7 +147,7 @@ EOF
 
   cat >"$dir/pushnova-ops-report.timer" <<EOF
 [Unit]
-Description=PushNova Ops 巡检报告定时器
+Description=PushNova Ops Inspection Report Timer
 
 [Timer]
 OnCalendar=$oncal_report
@@ -160,7 +160,7 @@ EOF
 
   cat >"$dir/pushnova-ops-alert.service" <<EOF
 [Unit]
-Description=PushNova Ops 异常监测
+Description=PushNova Ops Incident Detection
 After=network-online.target
 
 [Service]
@@ -172,7 +172,7 @@ EOF
 
   cat >"$dir/pushnova-ops-alert.timer" <<EOF
 [Unit]
-Description=PushNova Ops 异常监测定时器
+Description=PushNova Ops Incident Detection Timer
 
 [Timer]
 OnBootSec=2min
@@ -184,10 +184,10 @@ WantedBy=timers.target
 EOF
 
   systemctl daemon-reload >/dev/null 2>&1 || true
-  systemctl enable --now pushnova-ops-report.timer >/dev/null 2>&1 || pn_warn "启用 report timer 失败"
-  systemctl enable --now pushnova-ops-alert.timer >/dev/null 2>&1 || pn_warn "启用 alert timer 失败"
-  pn_ok "已安装 systemd timer"
-  pn_info "报告：$oncal_report · 异常监测：每 ${PN_OPS_ALERT_INTERVAL_MIN:-5} 分钟"
+  systemctl enable --now pushnova-ops-report.timer >/dev/null 2>&1 || pn_warn "Failed to enable report timer"
+  systemctl enable --now pushnova-ops-alert.timer >/dev/null 2>&1 || pn_warn "Failed to enable alert timer"
+  pn_ok "systemd timer installed"
+  pn_info "Report: $oncal_report · Monitoring: every ${PN_OPS_ALERT_INTERVAL_MIN:-5} minutes"
   return 0
 }
 
@@ -199,13 +199,13 @@ pn_schedule_remove_systemd() {
     rm -f "$dir/$u" 2>/dev/null || true
   done
   pn_have systemctl && systemctl daemon-reload >/dev/null 2>&1 || true
-  pn_ok "已移除 systemd timer"
+  pn_ok "systemd timer removed"
   return 0
 }
 
 pn_schedule_status_systemd() {
   if ! pn_schedule_has_systemd; then
-    printf '  %s\n' "systemd：不可用"
+    printf '  %s\n' "systemd: not available"
     return 0
   fi
   if systemctl list-timers 'pushnova-ops*' --all --no-pager >/dev/null 2>&1; then
@@ -220,14 +220,14 @@ pn_schedule_status_systemd() {
 }
 
 # ---------------------------------------------------------------------------
-# 统一入口
+# Unified Entry
 # ---------------------------------------------------------------------------
 pn_schedule_install() {
   local mode=${PN_OPS_SCHEDULER:-auto}
   case "$mode" in
     cron)    pn_schedule_install_cron ;;
     systemd) pn_schedule_install_systemd ;;
-    none)    pn_info "按配置跳过定时任务安装（PN_OPS_SCHEDULER=none）"; return 0 ;;
+    none)    pn_info "Skipping schedule installation as requested (PN_OPS_SCHEDULER=none)"; return 0 ;;
     auto|*)
       if pn_schedule_has_systemd; then
         pn_schedule_install_systemd || pn_schedule_install_cron
@@ -244,7 +244,7 @@ pn_schedule_remove() {
 }
 
 pn_schedule_status() {
-  printf '\n%s\n' "$(pn_c bold '定时任务状态')"
+  printf '\n%s\n' "$(pn_c bold 'Scheduled Tasks Status')"
   pn_schedule_status_cron
   pn_schedule_status_systemd
   printf '\n'

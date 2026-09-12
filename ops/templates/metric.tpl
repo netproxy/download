@@ -1,5 +1,5 @@
-📈 {{HOST}} 指标遥测 · {{TIME}}
+📈 {{HOST}} Telemetry · {{TIME}}
 
 {{SUMMARY}}
-概览：{{COUNTS}} · 已运行 {{UPTIME}}
+Overview: {{COUNTS}} · Uptime {{UPTIME}}
 {{FINDINGS}}

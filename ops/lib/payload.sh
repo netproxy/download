@@ -1,15 +1,15 @@
 # shellcheck shell=bash
 # =============================================================================
-# PushNova Ops · 模板渲染与推送报文构造
-#   模板变量：{{HOST}} {{IP}} {{TIME}} {{OS}} {{KERNEL}} {{UPTIME}} {{STATUS}}
-#             {{STATUS_EMOJI}} {{SEVERITY}} {{COUNTS}} {{SUMMARY}} {{LINES}}
-#             {{MD_TABLE}} {{FINDINGS}} {{RECOVERED}} {{COUNT}} {{TITLE}}
-#             {{FINGERPRINT}} {{TARGET_DESC}} {{TEMPLATE}} {{CARD_TYPE}} ...
-#   卡片类型映射（PushNova 原生组件）：
-#     standard → STANDARD        compact  → STANDARD（单行）
-#     rich     → RICH_MARKDOWN   metric   → METRIC
-#     table    → STRUCTURED_TABLE storm   → STORM_FOLD（指纹收敛）
-#     hitl     → HITL（人工审批按钮）
+# PushNova Ops · Template Rendering and Payload Construction
+#   Template variables: {{HOST}} {{IP}} {{TIME}} {{OS}} {{KERNEL}} {{UPTIME}} {{STATUS}}
+#                       {{SEVERITY}} {{STATUS_EMOJI}} {{COUNTS}} {{FINDINGS}} {{LINES}}
+#                       {{MD_TABLE}} {{SUMMARY}} {{RECOVERED}} {{COUNT}} {{FINGERPRINT}}
+#                       {{TAG}} {{TITLE}} {{MESSAGE}} {{EVENT}} {{PRIORITY}}
+#   Card type mappings (PushNova native components):
+#     standard -> STANDARD        compact  -> STANDARD (single line)
+#     rich     -> RICH_MARKDOWN   metric   -> METRIC
+#     table    -> STRUCTURED_TABLE storm   -> STORM_FOLD (fingerprint aggregation)
+#     hitl     -> HITL (Human-in-the-loop approval actions)
 # =============================================================================
 
 PN_TPL_DIR=""
@@ -29,7 +29,7 @@ pn_card_type() {
 pn_template_names() { echo "standard compact rich metric table storm hitl manual test"; }
 
 pn_template_path() {
-  # 依次在 安装目录/templates、脚本目录/templates、~/.config 下查找
+  # Lookup in install_dir/templates, script_dir/templates, and ~/.config in order
   local name=$1 base
   for base in "${PN_OPS_HOME:-}" "${PN_OPS_SELFDIR:-}" "$(pn_home)" "${XDG_CONFIG_HOME:-$HOME/.config}/pushnova-ops/templates"; do
     [ -n "$base" ] || continue
@@ -45,15 +45,15 @@ pn_template_require() {
   local name=$1 p
   p=$(pn_template_path "$name" || true)
   if [ -z "$p" ]; then
-    pn_warn "模板 $name.tpl 不存在，已退回 standard 模板"
+    pn_warn "Template $name.tpl does not exist, fell back to standard template"
     p=$(pn_template_path standard || true)
   fi
-  [ -n "$p" ] || pn_die "找不到任何模板文件，请检查安装是否完整"
+  [ -n "$p" ] || pn_die "No template files found; please check installation integrity"
   printf '%s' "$p"
 }
 
 # ---------------------------------------------------------------------------
-# 变量存储与渲染
+# Variable Storage and Rendering
 # ---------------------------------------------------------------------------
 pn_tpl_init() {
   PN_TPL_DIR="$(pn_state_sub run)/tplvals.$$"
@@ -75,9 +75,9 @@ pn_tpl_keys() {
 }
 
 pn_render_template() {
-  # pn_render_template <模板文件路径>
+  # pn_render_template <template_path>
   local tpl=$1 out key val
-  [ -f "$tpl" ] || { pn_error "模板文件不存在: $tpl"; return 1; }
+  [ -f "$tpl" ] || { pn_error "Template file does not exist: $tpl"; return 1; }
   out=$(cat "$tpl" 2>/dev/null)
   for key in $(pn_tpl_keys); do
     val=$(pn_tpl_get "$key")
@@ -85,7 +85,7 @@ pn_render_template() {
       *"{{$key}}"*) out=${out//\{\{$key\}\}/$val} ;;
     esac
   done
-  # 清理未填充的占位符
+  # Clear unfilled placeholders
   out=$(printf '%s' "$out" | sed 's/{{[A-Za-z_]*}}//g')
   printf '%s\n' "$out"
 }
@@ -97,7 +97,7 @@ pn_render_named() {
 }
 
 # ---------------------------------------------------------------------------
-# 公共模板变量
+# Common Template Variables
 # ---------------------------------------------------------------------------
 pn_tpl_fill_common() {
   # pn_tpl_fill_common <event> <severity> <count>
@@ -113,7 +113,7 @@ pn_tpl_fill_common() {
   pn_tpl_val DATE "$(date '+%Y-%m-%d' 2>/dev/null)"
   pn_tpl_val OS "$(pn_os_pretty)"
   pn_tpl_val KERNEL "$(pn_kernel)"
-  pn_tpl_val UPTIME "$(pn_uptime_days) 天"
+  pn_tpl_val UPTIME "$(pn_uptime_days) days"
   pn_tpl_val STATUS "$(pn_sev_cn "$overall")"
   pn_tpl_val STATUS_EMOJI "$(pn_sev_emoji "$overall")"
   pn_tpl_val SEVERITY "$(pn_sev_cn "$sev")"
@@ -121,31 +121,31 @@ pn_tpl_fill_common() {
   pn_tpl_val COUNT "$count"
   pn_tpl_val TAG "v${PN_OPS_VERSION}"
   pn_tpl_val TARGET_DESC "$(pn_target_desc)"
-  pn_tpl_val REPORT_CRON "${PN_OPS_REPORT_CRON:-未启用}"
-  pn_tpl_val ALERT_CRON "${PN_OPS_ALERT_CRON:-未启用}"
+  pn_tpl_val REPORT_CRON "${PN_OPS_REPORT_CRON:-(disabled)}"
+  pn_tpl_val ALERT_CRON "${PN_OPS_ALERT_CRON:-(disabled)}"
   pn_tpl_val LINES "$(pn_format_lines)"
   pn_tpl_val MD_TABLE "$(pn_format_markdown)"
   pn_tpl_val FINDINGS "$(pn_format_findings)"
   pn_tpl_val SUMMARY "$(pn_format_compact)"
   pn_tpl_val RECOVERED "$(pn_format_recovered)"
   pn_tpl_val MESSAGE "${PN_MANUAL_MESSAGE:-}"
-  pn_tpl_val TITLE "${PN_MANUAL_TITLE:-PushNova Ops 通知}"
+  pn_tpl_val TITLE "${PN_MANUAL_TITLE:-PushNova Ops Notification}"
   case "$event" in
-    report)   pn_tpl_val EVENT "定时巡检报告" ;;
-    alert)    pn_tpl_val EVENT "异常告警" ;;
-    recovery) pn_tpl_val EVENT "恢复通知" ;;
-    test)     pn_tpl_val EVENT "安装测试" ;;
-    *)        pn_tpl_val EVENT "手动通知" ;;
+    report)   pn_tpl_val EVENT "Scheduled Inspection Report" ;;
+    alert)    pn_tpl_val EVENT "Incident Alert" ;;
+    recovery) pn_tpl_val EVENT "Recovery Notification" ;;
+    test)     pn_tpl_val EVENT "Installation Test" ;;
+    *)        pn_tpl_val EVENT "Manual Notification" ;;
   esac
   pn_tpl_val PRIORITY "${PN_PAYLOAD_PRIORITY:-NORMAL}"
 }
 
 pn_format_recovered() {
   local f=${PN_DECISIONS:-}
-  [ -n "$f" ] && [ -f "$f" ] || { printf '（无）'; return 0; }
+  [ -n "$f" ] && [ -f "$f" ] || { printf '(none)'; return 0; }
   local out
-  out=$(awk -F'\t' '$1=="RECOVERY" { printf "✅ %s 已恢复正常\n", $4 }' "$f" 2>/dev/null)
-  [ -z "$out" ] && out="（无）"
+  out=$(awk -F'\t' '$1=="RECOVERY" { printf "✅ %s recovered to normal\n", $4 }' "$f" 2>/dev/null)
+  [ -z "$out" ] && out="(none)"
   printf '%s' "$out"
 }
 
@@ -155,20 +155,20 @@ pn_auto_title() {
   host=$(pn_hostname)
   case "$event" in
     report)
-      if [ "$sev" = "crit" ]; then printf '🔴 %s 巡检发现严重异常' "$host"
-      elif [ "$sev" = "warn" ]; then printf '🟡 %s 巡检发现告警' "$host"
-      else printf '📊 %s 服务器巡检报告' "$host"; fi ;;
+      if [ "$sev" = "crit" ]; then printf '🔴 %s Inspection: Critical Alert' "$host"
+      elif [ "$sev" = "warn" ]; then printf '🟡 %s Inspection: Warning Alert' "$host"
+      else printf '📊 %s Server Inspection Report' "$host"; fi ;;
     alert)
-      if [ "$sev" = "crit" ]; then printf '🚨 %s 严重告警' "$host"
-      else printf '⚠️ %s 指标告警' "$host"; fi ;;
-    recovery) printf '🟢 %s 已恢复正常' "$host" ;;
-    test)     printf '✅ PushNova Ops 安装测试' ;;
-    *)        printf '%s' "${PN_MANUAL_TITLE:-PushNova Ops 通知}" ;;
+      if [ "$sev" = "crit" ]; then printf '🚨 %s Critical Alert' "$host"
+      else printf '⚠️ %s Metric Alert' "$host"; fi ;;
+    recovery) printf '🟢 %s Recovered to Normal' "$host" ;;
+    test)     printf '✅ PushNova Ops Test Notification' ;;
+    *)        printf '%s' "${PN_MANUAL_TITLE:-PushNova Ops Notification}" ;;
   esac
 }
 
 # ---------------------------------------------------------------------------
-# 富媒体 JSON（metrics_json / table_json / kline 等）
+# Rich JSON (metrics_json / table_json / kline etc)
 # ---------------------------------------------------------------------------
 pn_metric_json_key() {
   case "$1" in
@@ -229,7 +229,7 @@ pn_build_table_json() {
     [ "$first" = "1" ] || out="$out,"
     first=0
     d=${detail:0:60}
-    out="$out{\"指标\":$(pn_json_str "$label"),\"当前值\":$(pn_json_str "$(pn_trim "$vtext")"),\"状态\":$(pn_json_str "$(pn_sev_cn "$sev")"),\"说明\":$(pn_json_str "$d")}"
+    out="$out{\"metric\":$(pn_json_str "$label"),\"value\":$(pn_json_str "$(pn_trim "$vtext")"),\"status\":$(pn_json_str "$(pn_sev_cn "$sev")"),\"detail\":$(pn_json_str "$d")}"
   done <<EOF
 $(pn_results_num)
 EOF
@@ -238,7 +238,7 @@ EOF
     [ "$first" = "1" ] || out="$out,"
     first=0
     d=${detail:0:60}
-    out="$out{\"指标\":$(pn_json_str "$label"),\"当前值\":$(pn_json_str "$(pn_sev_cn "$status")"),\"状态\":$(pn_json_str "$(pn_sev_cn "$status")"),\"说明\":$(pn_json_str "$d")}"
+    out="$out{\"metric\":$(pn_json_str "$label"),\"value\":$(pn_json_str "$(pn_sev_cn "$status")"),\"status\":$(pn_json_str "$(pn_sev_cn "$status")"),\"detail\":$(pn_json_str "$d")}"
   done <<EOF
 $(pn_results_chk)
 EOF
@@ -247,20 +247,20 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# 目标寻址字段
+# Target Addressing Fields
 # ---------------------------------------------------------------------------
 pn_target_json_fields() {
-  # 依据 PN_OPS_TARGET_MODE 输出 JSON 片段（含前导逗号，或空串）
+  # Outputs JSON snippet according to PN_OPS_TARGET_MODE
   local mode=${PN_OPS_TARGET_MODE:-account} t=${PN_OPS_TARGET:-}
   case "$mode" in
     device)
-      [ -z "$t" ] && { pn_error "推送方式为「手机」但未配置目标设备 Token"; return 1; }
+      [ -z "$t" ] && { pn_error "Target mode is 'device' but device token is not configured"; return 1; }
       printf ',\n  "token": %s' "$(pn_json_str "$t")" ;;
     topic)
-      [ -z "$t" ] && { pn_error "推送方式为「频道」但未配置频道名"; return 1; }
+      [ -z "$t" ] && { pn_error "Target mode is 'topic' but topic code is not configured"; return 1; }
       printf ',\n  "topic": %s' "$(pn_json_str "$t")" ;;
     group)
-      [ -z "$t" ] && { pn_error "推送方式为「群组」但未配置群组名"; return 1; }
+      [ -z "$t" ] && { pn_error "Target mode is 'group' but group name is not configured"; return 1; }
       printf ',\n  "group": %s' "$(pn_json_str "$t")" ;;
     account|*)
       printf '' ;;
@@ -268,11 +268,11 @@ pn_target_json_fields() {
 }
 
 # ---------------------------------------------------------------------------
-# 报文构造
+# Payload Construction
 # ---------------------------------------------------------------------------
 pn_build_payload() {
   # pn_build_payload <event> <template> <priority> [count]
-  # 输出：报文文件路径（同时导出 PN_PAYLOAD_JSON）
+  # Output: payload file path (exports PN_PAYLOAD_JSON)
   local event=$1 template=$2 priority=$3 count=${4:-1}
   local card body_tpl body title sev host
   card=$(pn_card_type "$template")
@@ -335,7 +335,7 @@ pn_build_payload() {
   } >"$PN_PAYLOAD" 2>/dev/null
 
   if ! pn_json_ok "$(cat "$PN_PAYLOAD" 2>/dev/null)"; then
-    pn_error "报文 JSON 构造失败，内容如下："
+    pn_error "Failed to construct payload JSON, content:"
     cat "$PN_PAYLOAD" >&2 2>/dev/null || true
     return 1
   fi
@@ -344,16 +344,16 @@ pn_build_payload() {
 }
 
 pn_fingerprint() {
-  # 告警指纹：同主机同类事件在客户端折叠为同一张卡片
+  # Alert fingerprint: collapses identical events on the client
   local event=$1 host
   host=$(pn_hostname | sed 's/[^A-Za-z0-9._-]/_/g')
   printf 'pn_ops_%s_%s' "$host" "$event"
 }
 
 pn_hitl_fields() {
-  # 人工审批按钮：PN_MANUAL_ACTIONS="APPROVE:允许扩容:PRIMARY,REJECT:拒绝:DESTRUCTIVE"
+  # HITL approval buttons: PN_MANUAL_ACTIONS="APPROVE:Approve:PRIMARY,REJECT:Reject:DESTRUCTIVE"
   local spec=${PN_MANUAL_ACTIONS:-}
-  [ -z "$spec" ] && spec="APPROVE:已处理:PRIMARY,REJECT:忽略:DESTRUCTIVE"
+  [ -z "$spec" ] && spec="APPROVE:Acknowledge:PRIMARY,REJECT:Dismiss:DESTRUCTIVE"
   local out="" first=1 item key label style
   out=",\n  \"actions\": ["
   local IFS_OLD=$IFS

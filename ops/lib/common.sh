@@ -1,21 +1,21 @@
 # shellcheck shell=bash
 # =============================================================================
-# PushNova Ops · 公共函数库
-#   - 日志 / 颜色 / 错误处理
-#   - 纯 bash JSON 转义（无 jq 也能发推送）
-#   - TTY 交互封装（支持 curl | bash 管道安装场景）
-#   - 路径解析 / 配置文件 / 状态目录 / 互斥锁 / 日志轮转
-# 兼容 bash 3.2+（macOS 自带 bash）、Linux、BusyBox ash 的常见子集
+# PushNova Ops · Common Library
+#   - Logging / ANSI colors / Error handling
+#   - Pure bash JSON escaping (send notifications without jq)
+#   - TTY interaction wrapper (supports `curl | bash` pipeline installs)
+#   - Path resolution / Config / State dir / Mutex lock / Log rotation
+# Compatible with bash 3.2+ (macOS stock bash), Linux, BusyBox ash common subsets
 # =============================================================================
 
 : "${PN_OPS_VERSION:=1.0.0}"
 : "${PN_OPS_NAME:=pushnova-ops}"
 
 # ---------------------------------------------------------------------------
-# 路径解析
+# Path Resolution
 # ---------------------------------------------------------------------------
 pn_script_dir() {
-  # 解析当前脚本所在目录（跟随软链接）
+  # Resolve directory of current script (following symlinks)
   local src=${BASH_SOURCE[1]:-$0} dir
   dir=$(dirname "$src")
   if command -v readlink >/dev/null 2>&1; then
@@ -27,7 +27,7 @@ pn_script_dir() {
 }
 
 pn_home() {
-  # 程序安装目录：优先环境变量 -> 已安装目录 -> 当前脚本目录
+  # Program installation directory: env var -> installed dir -> current script dir
   if [ -n "${PUSHNOVA_OPS_HOME:-}" ]; then
     printf '%s' "$PUSHNOVA_OPS_HOME"
   elif [ -d /opt/pushnova-ops/lib ] && [ -z "${PN_OPS_SELFDIR:-}" ]; then
@@ -69,7 +69,7 @@ pn_state_sub() {
 pn_log_file() { printf '%s/pushnova-ops.log' "$(pn_state_sub logs)"; }
 
 # ---------------------------------------------------------------------------
-# 颜色与日志
+# Colors and Logging
 # ---------------------------------------------------------------------------
 pn_color_enabled() {
   [ -n "${NO_COLOR:-}" ] && return 1
@@ -159,7 +159,7 @@ pn_banner() {
   printf '\n%s\n' "$(pn_c bold "$(pn_c cyan "▌ $t")")"
 }
 
-# 日志轮转：超过 PN_OPS_LOG_MAX_KB 则截断保留尾部
+# Log rotation: truncate when exceeding PN_OPS_LOG_MAX_KB
 pn_rotate_log() {
   local f max size
   f="$(pn_log_file)"; max=${PN_OPS_LOG_MAX_KB:-512}
@@ -173,16 +173,16 @@ pn_rotate_log() {
 }
 
 # ---------------------------------------------------------------------------
-# 通用工具
+# General Utilities
 # ---------------------------------------------------------------------------
 pn_have() { command -v "$1" >/dev/null 2>&1; }
 
 pn_need() {
-  # 校验命令是否存在，缺失则返回非 0
+  # Check if required commands exist, return non-zero if missing
   local missing=""
   for c in "$@"; do pn_have "$c" || missing="$missing $c"; done
   if [ -n "$missing" ]; then
-    pn_error "缺少依赖命令:$missing"
+    pn_error "Missing required command(s):$missing"
     return 1
   fi
   return 0
@@ -198,7 +198,7 @@ pn_trim() {
 }
 
 pn_epoch() {
-  # 优先使用 bash 内建 EPOCHSECONDS（bash 5+），避免为取时间反复 fork
+  # Prefer built-in EPOCHSECONDS (bash 5+) to avoid repetitive forks
   if [ -n "${EPOCHSECONDS:-}" ]; then
     printf '%s' "$EPOCHSECONDS"
   else
@@ -216,7 +216,7 @@ pn_is_int() {
 }
 
 pn_is_num() {
-  # 允许 -12 / 12.5 / 1e3
+  # Supports -12 / 12.5 / 1e3
   case "$1" in
     ''|*[!0-9.eE+-]*) return 1 ;;
     *) return 0 ;;
@@ -227,7 +227,7 @@ pn_ge() { awk -v a="$1" -v b="$2" 'BEGIN{ if (a+0 >= b+0) exit 0; exit 1 }'; }
 pn_le() { awk -v a="$1" -v b="$2" 'BEGIN{ if (a+0 <= b+0) exit 0; exit 1 }'; }
 
 pn_fmt() {
-  # 数字格式化：pn_fmt <value> [精度]（纯 bash，不 fork）
+  # Numeric formatting: pn_fmt <value> [precision] (pure bash, no fork)
   local v=$1 p=${2:-1}
   case "$v" in
     ''|*[!0-9.eE+-]*) printf '%s' "$v" ;;
@@ -244,7 +244,7 @@ pn_human_bytes() {
 }
 
 pn_masked() {
-  # 凭证脱敏：pn_ak_live_abcd...wxyz（纯 bash，不 fork）
+  # Mask credentials: pn_ak_live_abcd...wxyz (pure bash, no fork)
   local s=$1 n=${#1}
   if [ "$n" -le 14 ]; then printf '***'; return 0; fi
   printf '%s...%s' "${s:0:12}" "${s: -3}"
@@ -258,10 +258,10 @@ pn_bool() {
 }
 
 # ---------------------------------------------------------------------------
-# JSON 工具（不依赖 jq 的输出侧实现）
+# JSON Utilities (pure output implementation without jq)
 # ---------------------------------------------------------------------------
 pn_json_escape() {
-  # 转义为 JSON 字符串内容（不含引号）
+  # Escape string content for JSON (without enclosing quotes)
   local s=$1
   s=${s//\\/\\\\}
   s=${s//\"/\\\"}
@@ -270,7 +270,7 @@ pn_json_escape() {
   s=${s//$'\t'/\\t}
   s=${s//$'\b'/\\b}
   s=${s//$'\f'/\\f}
-  # 清理其余控制字符
+  # Strip remaining control characters
   if pn_have tr; then
     s=$(printf '%s' "$s" | tr -d '\000-\007\013\016-\037' 2>/dev/null || printf '%s' "$s")
   fi
@@ -283,9 +283,9 @@ pn_json_num_or_zero() {
   if pn_is_num "$1"; then printf '%s' "$1"; else printf '0'; fi
 }
 
-# 读取 JSON 字段（优先 jq，退化到 grep/sed 的宽松解析）
+# Read JSON field (prefer jq, fallback to grep/sed loose parsing)
 pn_json_get() {
-  # pn_json_get <json> <key>  -> 打印字符串值（无则空）
+  # pn_json_get <json> <key>  -> print string value (empty if none)
   local json=$1 key=$2
   if pn_have jq; then
     printf '%s' "$json" | jq -r --arg k "$key" '
@@ -298,7 +298,7 @@ pn_json_get() {
 }
 
 pn_json_ok() {
-  # 校验 JSON 合法性（无 jq 时做括号粗校验）
+  # Validate JSON structure (rough bracket check without jq)
   local json=$1
   if pn_have jq; then
     printf '%s' "$json" | jq -e . >/dev/null 2>&1
@@ -311,7 +311,7 @@ pn_json_ok() {
 }
 
 # ---------------------------------------------------------------------------
-# TTY 交互（必须支持 `curl ... | bash` 管道安装）
+# TTY Interaction (must support `curl ... | bash` pipeline installs)
 # ---------------------------------------------------------------------------
 PN_TTY_FD=""
 
@@ -347,7 +347,7 @@ pn_read_line() {
 }
 
 pn_read_secret() {
-  # 不支持的场景下退化为普通输入
+  # Fallback to standard input when hidden input is unsupported
   local prompt=$1 ans=""
   if pn_has_tty; then
     printf '%s: ' "$prompt" >&2
@@ -376,7 +376,7 @@ pn_confirm() {
 }
 
 pn_choose() {
-  # pn_choose <prompt> <default_index> <option...>  -> 打印选中项
+  # pn_choose <prompt> <default_index> <option...>  -> print selected option
   local prompt=$1 default=$2; shift 2
   local i=1 opt ans
   printf '\n%s\n' "$(pn_c bold "$prompt")" >&2
@@ -385,7 +385,7 @@ pn_choose() {
     i=$((i + 1))
   done
   while :; do
-    ans=$(pn_read_line "请选择序号" "$default")
+    ans=$(pn_read_line "Please choose an index" "$default")
     if pn_is_int "$ans" && [ "$ans" -ge 1 ] && [ "$ans" -lt "$i" ]; then
       i=1
       for opt in "$@"; do
@@ -393,13 +393,13 @@ pn_choose() {
         i=$((i + 1))
       done
     fi
-    printf '%s\n' "$(pn_c yellow '输入无效，请重新选择')" >&2
+    printf '%s\n' "$(pn_c yellow 'Invalid input, please try again')" >&2
     [ -z "$ans" ] && return 1
   done
 }
 
 pn_multiselect() {
-  # pn_multiselect <prompt> <default_indices_csv> <option...> -> 打印选中序号(csv)
+  # pn_multiselect <prompt> <default_indices_csv> <option...> -> print selected indices (csv)
   local prompt=$1 default=$2; shift 2
   local i=1 opt ans
   printf '\n%s\n' "$(pn_c bold "$prompt")" >&2
@@ -408,8 +408,8 @@ pn_multiselect() {
     i=$((i + 1))
   done
   local total=$((i - 1))
-  printf '%s\n' "$(pn_c dim "输入序号（逗号/空格分隔），a=全选，回车=默认 [$default]")" >&2
-  ans=$(pn_read_line "选择" "$default")
+  printf '%s\n' "$(pn_c dim "Enter indices (comma/space-separated), a=all, Enter=default [$default]")" >&2
+  ans=$(pn_read_line "Selection" "$default")
   case "$(pn_lower "$ans")" in
     a|all)
       ans=""
@@ -421,7 +421,7 @@ pn_multiselect() {
 }
 
 # ---------------------------------------------------------------------------
-# 互斥锁（防止定时任务重叠执行）
+# Mutex Lock (prevent overlapping execution of scheduled tasks)
 # ---------------------------------------------------------------------------
 PN_LOCK_DIR=""
 pn_lock() {
@@ -432,11 +432,11 @@ pn_lock() {
     printf '%s' "$$" >"$PN_LOCK_DIR/pid" 2>/dev/null || true
     return 0
   fi
-  # 陈旧锁清理（进程已死）
+  # Stale lock cleanup (process dead)
   local oldpid
   oldpid=$(cat "$PN_LOCK_DIR/pid" 2>/dev/null || echo "")
   if [ -n "$oldpid" ] && kill -0 "$oldpid" 2>/dev/null; then
-    pn_warn "上一次任务（PID $oldpid）仍在运行，本次跳过"
+    pn_warn "Previous task (PID $oldpid) is still running, skipping this round"
     return 1
   fi
   rm -rf "$PN_LOCK_DIR" 2>/dev/null || true
@@ -444,7 +444,7 @@ pn_lock() {
     printf '%s' "$$" >"$PN_LOCK_DIR/pid" 2>/dev/null || true
     return 0
   fi
-  pn_warn "无法获取锁 $PN_LOCK_DIR"
+  pn_warn "Cannot acquire lock $PN_LOCK_DIR"
   return 1
 }
 
@@ -453,7 +453,7 @@ pn_unlock() {
 }
 
 # ---------------------------------------------------------------------------
-# 主备信息
+# Host Information
 # ---------------------------------------------------------------------------
 pn_hostname() { hostname 2>/dev/null || cat /proc/sys/kernel/hostname 2>/dev/null || echo unknown; }
 
@@ -485,7 +485,7 @@ pn_cores() {
 }
 
 pn_uptime_days() {
-  # 打印运行天数（保留 1 位小数）
+  # Print uptime in days (with 1 decimal place)
   local up=""
   if [ -r /proc/uptime ]; then
     up=$(awk '{printf "%.1f", $1/86400}' /proc/uptime 2>/dev/null)
@@ -499,11 +499,11 @@ pn_uptime_human() {
   if awk -v s="$sec" 'BEGIN{exit !(s>0)}'; then
     awk -v s="$sec" 'BEGIN{
       d=int(s/86400); h=int((s%86400)/3600); m=int((s%3600)/60);
-      if (d>0) printf "%d天%d小时", d, h;
-      else if (h>0) printf "%d小时%d分", h, m;
-      else printf "%d分钟", m;
+      if (d>0) printf "%dd %dh", d, h;
+      else if (h>0) printf "%dh %dm", h, m;
+      else printf "%dm", m;
     }'
   else
-    printf '%s' "${pn_uptime_days} 天"
+    printf '%s days' "${pn_uptime_days}"
   fi
 }

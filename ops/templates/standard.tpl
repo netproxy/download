@@ -1,14 +1,14 @@
 {{TITLE}}
 
-主机：{{HOST}} ({{IP}})
-系统：{{OS}} · 内核 {{KERNEL}}
-时间：{{TIME}} · 已运行 {{UPTIME}}
-概览：{{COUNTS}}
+Host: {{HOST}} ({{IP}})
+System: {{OS}} · Kernel {{KERNEL}}
+Time: {{TIME}} · Uptime {{UPTIME}}
+Summary: {{COUNTS}}
 
-── 指标明细 ──
+── Metrics Breakdown ──
 {{LINES}}
 
-── 异常项 ──
+── Incidents ──
 {{FINDINGS}}
 
 PushNova Ops · {{TAG}}

@@ -1,10 +1,10 @@
-🟢 {{HOST}} 已恢复正常
+🟢 {{HOST}} Recovered to Normal
 
-恢复时间：{{TIME}}
-恢复项：
+Recovery Time: {{TIME}}
+Recovered Items:
 {{RECOVERED}}
 
-当前概览：{{COUNTS}}
+Current Status: {{COUNTS}}
 
-── 当前指标 ──
+── Current Metrics ──
 {{LINES}}

@@ -1,13 +1,13 @@
 # shellcheck shell=bash
 # =============================================================================
-# PushNova Ops · 配置管理
-#   配置文件为 KEY=VALUE 形式（KEY 必须是 PN_OPS_* 白名单内），权限 600。
-#   优先级：环境变量 > 配置文件 > 内置默认值
+# PushNova Ops · Configuration Management
+#   Config file format is KEY=VALUE (KEY must be within PN_OPS_* whitelist), chmod 600.
+#   Precedence: Env vars > Config file > Built-in defaults
 # =============================================================================
 
 PN_OPS_CONF_VERSION=1
 
-# 需要落盘保存的键（顺序即写入顺序）
+# Keys persisted to disk (written in this exact order)
 pn_conf_keys() {
   cat <<'EOF'
 PN_OPS_GATEWAY
@@ -59,7 +59,7 @@ pn_var_valid_name() {
 }
 
 pn_var_get() {
-  # 读取变量值（间接展开，名称已校验）
+  # Read variable value (indirect expansion, verified name)
   local k=$1
   pn_var_valid_name "$k" || { printf ''; return 0; }
   eval "printf '%s' \"\${$k:-}\""
@@ -81,7 +81,7 @@ pn_conf_unquote() {
 }
 
 # ---------------------------------------------------------------------------
-# 默认配置
+# Default Configuration
 # ---------------------------------------------------------------------------
 pn_conf_defaults() {
   local cores
@@ -127,9 +127,7 @@ pn_conf_defaults() {
 }
 
 pn_conf_load() {
-  # 记录调用本函数前已存在的 PN_OPS_*（来自命令行参数或环境变量），它们优先级最高；
-  # 之后才套用内置默认值，最后让配置文件覆盖「既非命令行也非环境变量」的项。
-  # 优先级：命令行参数 > 环境变量 > 配置文件 > 内置默认值
+  # Precedence: CLI args > Environment variables > Config file > Defaults
   local pre_keys="" k v line
   while IFS= read -r k; do
     case "$k" in
@@ -159,17 +157,17 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# 配置写入
+# Configuration Persistence
 # ---------------------------------------------------------------------------
 pn_conf_write() {
   local f dir tmp
   f=$(pn_conf_path)
   dir=$(dirname "$f")
-  mkdir -p "$dir" 2>/dev/null || pn_die "无法创建配置目录: $dir"
+  mkdir -p "$dir" 2>/dev/null || pn_die "Cannot create config directory: $dir"
   tmp="$f.tmp.$$"
   {
-    printf '# PushNova Ops 配置 · %s\n' "$(pn_time_str)"
-    printf '# 权限 600，请勿泄露 PN_OPS_API_KEY\n'
+    printf '# PushNova Ops Configuration · %s\n' "$(pn_time_str)"
+    printf '# File permission 600, keep PN_OPS_API_KEY secure\n'
     printf 'PN_OPS_CONF_VERSION=%s\n' "$PN_OPS_CONF_VERSION"
     local k v
     while IFS= read -r k; do
@@ -183,7 +181,7 @@ EOF
   chmod 600 "$tmp" 2>/dev/null || true
   mv "$tmp" "$f" || return 1
   chmod 600 "$f" 2>/dev/null || true
-  pn_debug "配置已写入 $f"
+  pn_debug "Configuration written to $f"
   return 0
 }
 
@@ -191,13 +189,13 @@ pn_conf_set() {
   # pn_conf_set KEY VALUE
   local k=$1; shift
   local v=$*
-  pn_var_valid_name "$k" || { pn_error "非法配置键: $k（必须以 PN_OPS_ 开头）"; return 1; }
+  pn_var_valid_name "$k" || { pn_error "Invalid config key: $k (must start with PN_OPS_)"; return 1; }
   pn_var_set "$k" "$v"
   pn_conf_write
 }
 
 # ---------------------------------------------------------------------------
-# 阈值：PN_OPS_THRESHOLDS="cpu=80:95:max mem=85:95:max"
+# Thresholds: PN_OPS_THRESHOLDS="cpu=80:95:max mem=85:95:max"
 # ---------------------------------------------------------------------------
 pn_th_default() {
   # pn_th_default <id> <warn|crit|dir>
@@ -231,7 +229,7 @@ pn_th_default() {
 }
 
 pn_th_get() {
-  # pn_th_get <id> <warn|crit|dir>，回退到默认值（纯 bash 解析，不 fork）
+  # pn_th_get <id> <warn|crit|dir>, fallback to defaults (pure bash, no fork)
   local id=$1 field=$2 token rest w c d
   for token in ${PN_OPS_THRESHOLDS:-}; do
     case "$token" in
@@ -271,44 +269,44 @@ pn_th_set() {
 }
 
 # ---------------------------------------------------------------------------
-# 配置展示
+# Configuration Display
 # ---------------------------------------------------------------------------
 pn_target_desc() {
   case "${PN_OPS_TARGET_MODE:-account}" in
-    device) printf '手机单播 → %s' "$(pn_masked "${PN_OPS_TARGET:-未设置}")" ;;
-    topic)  printf '频道广播 → %s' "${PN_OPS_TARGET:-未设置}" ;;
-    group)  printf '群组群发 → %s' "${PN_OPS_TARGET:-未设置}" ;;
-    account) printf '全账号广播（token 下绑定的全部手机）' ;;
-    *)      printf '%s' "${PN_OPS_TARGET_MODE:-未设置}" ;;
+    device) printf 'Device Unicast → %s' "$(pn_masked "${PN_OPS_TARGET:-Not Set}")" ;;
+    topic)  printf 'Channel Broadcast → %s' "${PN_OPS_TARGET:-Not Set}" ;;
+    group)  printf 'Group Multicast → %s' "${PN_OPS_TARGET:-Not Set}" ;;
+    account) printf 'Account Broadcast (all devices under token)' ;;
+    *)      printf '%s' "${PN_OPS_TARGET_MODE:-Not Set}" ;;
   esac
 }
 
 pn_conf_show() {
   local k v
-  printf '\n%s\n' "$(pn_c bold '当前配置')"
+  printf '\n%s\n' "$(pn_c bold 'Current Configuration')"
   printf '%s\n' "$(pn_c dim "$(pn_conf_path)")"
   pn_hr
-  printf '  %-26s %s\n' '网关地址' "$PN_OPS_GATEWAY"
-  printf '  %-26s %s\n' '发送者 Token' "$(pn_masked "$PN_OPS_API_KEY")"
-  printf '  %-26s %s\n' '推送方式' "$(pn_target_desc)"
-  printf '  %-26s %s\n' '监控指标' "${PN_OPS_METRICS:-（空）}"
-  printf '  %-26s %s\n' '业务分类' "$PN_OPS_CATEGORY"
-  printf '  %-26s %s\n' '报告模板 / 告警模板' "$PN_OPS_REPORT_TEMPLATE / $PN_OPS_ALERT_TEMPLATE"
-  printf '  %-26s %s\n' '优先级 报告/告警/紧急' "$PN_OPS_PRIORITY_REPORT / $PN_OPS_PRIORITY_ALERT / $PN_OPS_PRIORITY_CRITICAL"
-  printf '  %-26s %s\n' '告警重复间隔(分钟)' "$PN_OPS_ALERT_REPEAT_MIN"
-  printf '  %-26s %s\n' '定时方式' "$PN_OPS_SCHEDULER"
-  printf '  %-26s %s\n' '报告 cron' "$PN_OPS_REPORT_CRON"
-  printf '  %-26s %s\n' '检测 cron' "$PN_OPS_ALERT_CRON"
-  printf '  %-26s %s\n' '代理' "${PN_OPS_PROXY:-（无）}"
+  printf '  %-26s %s\n' 'Gateway URL' "$PN_OPS_GATEWAY"
+  printf '  %-26s %s\n' 'Sender Token' "$(pn_masked "$PN_OPS_API_KEY")"
+  printf '  %-26s %s\n' 'Dispatch Mode' "$(pn_target_desc)"
+  printf '  %-26s %s\n' 'Monitored Metrics' "${PN_OPS_METRICS:-(none)}"
+  printf '  %-26s %s\n' 'Category' "$PN_OPS_CATEGORY"
+  printf '  %-26s %s\n' 'Report / Alert Template' "$PN_OPS_REPORT_TEMPLATE / $PN_OPS_ALERT_TEMPLATE"
+  printf '  %-26s %s\n' 'Priority (Report/Alert/Crit)' "$PN_OPS_PRIORITY_REPORT / $PN_OPS_PRIORITY_ALERT / $PN_OPS_PRIORITY_CRITICAL"
+  printf '  %-26s %s\n' 'Alert Repeat Interval (min)' "$PN_OPS_ALERT_REPEAT_MIN"
+  printf '  %-26s %s\n' 'Scheduler' "$PN_OPS_SCHEDULER"
+  printf '  %-26s %s\n' 'Report Cron' "$PN_OPS_REPORT_CRON"
+  printf '  %-26s %s\n' 'Alert Cron' "$PN_OPS_ALERT_CRON"
+  printf '  %-26s %s\n' 'Proxy' "${PN_OPS_PROXY:-(none)}"
   pn_hr
-  printf '  %-26s %s\n' '服务监控' "${PN_OPS_SERVICES:-（自动探测）}"
-  printf '  %-26s %s\n' '端口探测' "${PN_OPS_PORTS:-（空）}"
-  printf '  %-26s %s\n' 'HTTP 探测' "${PN_OPS_HTTP_URLS:-（空）}"
-  printf '  %-26s %s\n' 'Ping 探测' "${PN_OPS_PING_HOSTS:-（空）}"
-  printf '  %-26s %s\n' '证书域名' "${PN_OPS_CERT_HOSTS:-（空）}"
-  printf '  %-26s %s\n' '日志来源' "${PN_OPS_LOG_SOURCES:-（自动探测）}"
-  printf '  %-26s %s\n' '日志关键词' "$PN_OPS_LOG_KEYWORDS"
-  printf '  %-26s %s\n' '阈值' "${PN_OPS_THRESHOLDS:-（全部使用默认）}"
-  printf '  %-26s %s\n' '状态目录' "$(pn_state_dir)"
+  printf '  %-26s %s\n' 'Service Checks' "${PN_OPS_SERVICES:-(auto-detect)}"
+  printf '  %-26s %s\n' 'Port Probes' "${PN_OPS_PORTS:-(none)}"
+  printf '  %-26s %s\n' 'HTTP Probes' "${PN_OPS_HTTP_URLS:-(none)}"
+  printf '  %-26s %s\n' 'Ping Probes' "${PN_OPS_PING_HOSTS:-(none)}"
+  printf '  %-26s %s\n' 'SSL Cert Domains' "${PN_OPS_CERT_HOSTS:-(none)}"
+  printf '  %-26s %s\n' 'Log Sources' "${PN_OPS_LOG_SOURCES:-(auto-detect)}"
+  printf '  %-26s %s\n' 'Log Keywords' "$PN_OPS_LOG_KEYWORDS"
+  printf '  %-26s %s\n' 'Thresholds' "${PN_OPS_THRESHOLDS:-(defaults)}"
+  printf '  %-26s %s\n' 'State Directory' "$(pn_state_dir)"
   printf '\n'
 }

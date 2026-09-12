@@ -1,11 +1,11 @@
-{{STATUS_EMOJI}} 【{{SEVERITY}}】{{HOST}} 指标异常
+{{STATUS_EMOJI}} [{{SEVERITY}}] {{HOST}} Metric Alert
 
-时间：{{TIME}}
-概览：{{COUNTS}}
+Time: {{TIME}}
+Summary: {{COUNTS}}
 
 {{FINDINGS}}
 
-── 当前指标 ──
+── Current Metrics ──
 {{LINES}}
 
-第 {{COUNT}} 次提醒 · 指纹 {{FINGERPRINT}}
+Alert #{{COUNT}} · Fingerprint {{FINGERPRINT}}

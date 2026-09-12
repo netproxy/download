@@ -2,7 +2,7 @@
 
 {{MESSAGE}}
 
-主机：{{HOST}}
-时间：{{TIME}}
-事件：{{EVENT}} · 优先级 {{PRIORITY}}
+Host: {{HOST}}
+Time: {{TIME}}
+Event: {{EVENT}} · Priority {{PRIORITY}}
 {{ACTIONS_HINT}}

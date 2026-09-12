@@ -1,14 +1,14 @@
-✅ PushNova Ops 安装测试成功
+✅ PushNova Ops Test Notification
 
-主机：{{HOST}} ({{IP}})
-系统：{{OS}} · 内核 {{KERNEL}}
-时间：{{TIME}}
-推送方式：{{TARGET_DESC}}
-当前模板：{{TEMPLATE}}（卡片类型 {{CARD_TYPE}}）
+Host: {{HOST}} ({{IP}})
+System: {{OS}} · Kernel {{KERNEL}}
+Time: {{TIME}}
+Target: {{TARGET_DESC}}
+Template: {{TEMPLATE}} (Card Type: {{CARD_TYPE}})
 
-指标样例：
+Sample Metrics:
 {{LINES}}
 
-后续将按下面计划自动推送：
-· 巡检报告：{{REPORT_CRON}}
-· 异常监测：{{ALERT_CRON}}
+Scheduled Automations:
+· Periodic Inspection: {{REPORT_CRON}}
+· Incident Detection: {{ALERT_CRON}}

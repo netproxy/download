@@ -1,7 +1,7 @@
-📋 {{HOST}} 巡检明细表 · {{TIME}}
+📋 {{HOST}} Inspection Report · {{TIME}}
 
-概览：{{COUNTS}}
-系统：{{OS}} · 内核 {{KERNEL}} · 运行 {{UPTIME}}
+Summary: {{COUNTS}}
+System: {{OS}} · Kernel {{KERNEL}} · Uptime {{UPTIME}}
 
-异常项：
+Incidents:
 {{FINDINGS}}

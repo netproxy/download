@@ -1,6 +1,6 @@
-{{STATUS_EMOJI}} 【{{SEVERITY}}】{{HOST}} 告警收敛
+{{STATUS_EMOJI}} [{{SEVERITY}}] {{HOST}} Alert Storm Aggregated
 
 {{SUMMARY}}
 {{FINDINGS}}
 
-时间 {{TIME}} · 第 {{COUNT}} 次 · 指纹 {{FINGERPRINT}}
+Time {{TIME}} · Occurrence #{{COUNT}} · Fingerprint {{FINGERPRINT}}
