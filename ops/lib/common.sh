@@ -317,6 +317,10 @@ PN_TTY_FD=""
 
 pn_init_tty() {
   [ -n "$PN_TTY_FD" ] && return 0
+  if [ -t 0 ]; then
+    PN_TTY_FD=0
+    return 0
+  fi
   if [ -r /dev/tty ] && { exec 3</dev/tty; } 2>/dev/null; then
     PN_TTY_FD=3
     return 0

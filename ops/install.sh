@@ -3,7 +3,7 @@
 # PushNova Ops · 一键安装器
 #
 #   方式一（推荐，远程一键）：
-#     curl -fsSL https://raw.githubusercontent.com/netproxy/download/main/ops/install.sh | bash
+#     curl -fsSL https://raw.githubusercontent.com/netproxy/pushnova/main/ops/install.sh | bash
 #
 #   方式二（本地仓库）：
 #     bash ops/install.sh
@@ -28,6 +28,7 @@ PREFIX_DEFAULT="/opt/pushnova-ops"
 BIN_DIR_DEFAULT="/usr/local/bin"
 
 # 源码基地址候选（按顺序尝试）
+# 由于pushnova 不是公开仓库，所有ops放到了download下面
 BASE_URL_ENV="${PUSHNOVA_OPS_BASE_URL:-}"
 BASE_URL_RAW="https://raw.githubusercontent.com/netproxy/download/main/ops"
 BASE_URL_CDN="https://cdn.jsdelivr.net/gh/netproxy/download@main/ops"
@@ -294,4 +295,8 @@ printf '\n'
 export PUSHNOVA_OPS_HOME="$PREFIX"
 export PN_OPS_INSTALL_PREFIX="$PREFIX"
 # shellcheck disable=SC2086
-exec "$PREFIX/pushnova-ops" install $PASSTHRU
+if [ -r /dev/tty ]; then
+  exec "$PREFIX/pushnova-ops" install $PASSTHRU </dev/tty
+else
+  exec "$PREFIX/pushnova-ops" install $PASSTHRU
+fi

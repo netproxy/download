@@ -128,12 +128,22 @@ pn_wiz_token() {
   local tries=0
   while :; do
     tries=$((tries + 1))
-    pn_ask_secret PN_OPS_API_KEY "发送者 Token"
-    if [ -z "${PN_OPS_API_KEY:-}" ]; then
+    local cur ans
+    cur=$(pn_var_get PN_OPS_API_KEY)
+    if [ -n "$cur" ]; then
+      printf '  %s\n' "$(pn_c dim "当前已配置（$(pn_masked "$cur")），回车可保留旧 Key")" >&2
+    fi
+    ans=$(pn_read_line "  发送者 Token" "")
+    if [ -z "$ans" ] && [ -n "$cur" ]; then
+      ans=$cur
+    fi
+    if [ -z "$ans" ]; then
       pn_error "Token 不能为空"
       [ "$tries" -ge 3 ] && return 1
       continue
     fi
+    PN_OPS_API_KEY=$ans
+    export PN_OPS_API_KEY
     case "$PN_OPS_API_KEY" in
       pn_tok_*|pn_tok_live_*)
         pn_warn "检测到这是设备 Token（收件人门牌号）。运维脚本需要的是发信 API Key（pn_ak_...）"
