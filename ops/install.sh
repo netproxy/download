@@ -3,7 +3,7 @@
 # PushNova Ops · One-line Installer
 #
 #   Method 1 (Recommended, remote one-liner):
-#     curl -fsSL https://raw.githubusercontent.com/netproxy/pushnova/main/ops/install.sh | bash
+#     curl -fsSL https://raw.githubusercontent.com/netproxy/download/main/ops/install.sh | bash
 #
 #   Method 2 (Local repository):
 #     bash ops/install.sh
@@ -13,6 +13,7 @@
 #   Thresholds & Scheduler -> Pipeline Verification.
 #
 #   Options (Remaining arguments are forwarded to pushnova-ops install):
+#     --lang <en|zh>         Interface language (default en, or zh for Chinese)
 #     --prefix <dir>         Installation directory, default /opt/pushnova-ops
 #     --bin-dir <dir>        Executable symlink directory, default /usr/local/bin
 #     --src-url <url>        Base URL for source files (for mirrors or air-gapped setups)

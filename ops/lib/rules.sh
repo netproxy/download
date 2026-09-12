@@ -37,12 +37,21 @@ pn_sev_marker() {
 }
 
 pn_sev_cn() {
-  case "$1" in
-    crit) printf 'CRITICAL' ;;
-    warn) printf 'WARNING' ;;
-    na)   printf 'UNKNOWN' ;;
-    *)    printf 'OK' ;;
-  esac
+  if pn_is_zh; then
+    case "$1" in
+      crit) printf '严重' ;;
+      warn) printf '警告' ;;
+      na)   printf '未知' ;;
+      *)    printf '正常' ;;
+    esac
+  else
+    case "$1" in
+      crit) printf 'CRITICAL' ;;
+      warn) printf 'WARNING' ;;
+      na)   printf 'UNKNOWN' ;;
+      *)    printf 'OK' ;;
+    esac
+  fi
 }
 
 pn_sev_emoji() {
@@ -350,16 +359,20 @@ pn_format_findings() {
   # Pure bash two-pass scan: critical first, then warning
   local sev key label detail
   if [ ! -s "$PN_FINDINGS" ]; then
-    printf 'No incidents. All monitored metrics are within normal ranges.\n'
+    if pn_is_zh; then
+      printf '无异常。所有监控指标均在正常阈值范围内。\n'
+    else
+      printf 'No incidents. All monitored metrics are within normal ranges.\n'
+    fi
     return 0
   fi
   while IFS="$(printf '\t')" read -r sev key label detail; do
     [ "$sev" = "crit" ] || continue
-    printf '🔴 [CRIT] %s: %s\n' "$label" "$detail"
+    printf '🔴 [%s] %s: %s\n' "$(pn_t 'CRIT' '严重')" "$label" "$detail"
   done <"$PN_FINDINGS"
   while IFS="$(printf '\t')" read -r sev key label detail; do
     [ "$sev" = "warn" ] || continue
-    printf '🟡 [WARN] %s: %s\n' "$label" "$detail"
+    printf '🟡 [%s] %s: %s\n' "$(pn_t 'WARN' '警告')" "$label" "$detail"
   done <"$PN_FINDINGS"
   return 0
 }
@@ -384,7 +397,11 @@ EOF
 }
 
 pn_findings_counts() {
-  printf '%s Critical / %s Warning' "$PN_CRIT_COUNT" "$PN_WARN_COUNT"
+  if pn_is_zh; then
+    printf '%s 严重 / %s 警告' "$PN_CRIT_COUNT" "$PN_WARN_COUNT"
+  else
+    printf '%s Critical / %s Warning' "$PN_CRIT_COUNT" "$PN_WARN_COUNT"
+  fi
 }
 
 pn_decision_count() {

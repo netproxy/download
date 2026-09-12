@@ -80,17 +80,17 @@ pn_schedule_remove_cron() {
 
 pn_schedule_status_cron() {
   if ! pn_cron_available; then
-    printf '  %s\n' "cron: not available (missing crontab command)"
+    printf '  %s\n' "$(pn_t "cron: not available (missing crontab command)" "cron: 不可用 (缺失 crontab 命令)")"
     return 0
   fi
   local cur
   cur=$(crontab -l 2>/dev/null || true)
   case "$cur" in
     *"$PN_CRON_BEGIN"*)
-      printf '  %s\n' "$(pn_c green 'cron: installed')"
+      printf '  %s\n' "$(pn_c green "$(pn_t "cron: installed" "cron: 已安装")")"
       printf '%s\n' "$cur" | sed -n "/$(printf '%s' "$PN_CRON_BEGIN" | sed 's/[][\.*^$/]/\\&/g')/,/$(printf '%s' "$PN_CRON_END" | sed 's/[][\.*^$/]/\\&/g')/p" | sed 's/^/    /'
       ;;
-    *) printf '  %s\n' "$(pn_c yellow 'cron: pushnova-ops tasks not installed')" ;;
+    *) printf '  %s\n' "$(pn_c yellow "$(pn_t "cron: pushnova-ops tasks not installed" "cron: pushnova-ops 定时任务未安装")")" ;;
   esac
 }
 
@@ -244,7 +244,7 @@ pn_schedule_remove() {
 }
 
 pn_schedule_status() {
-  printf '\n%s\n' "$(pn_c bold 'Scheduled Tasks Status')"
+  printf '\n%s\n' "$(pn_c bold "$(pn_t 'Scheduled Tasks Status' '定时任务调度状态')")"
   pn_schedule_status_cron
   pn_schedule_status_systemd
   printf '\n'

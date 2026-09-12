@@ -75,7 +75,7 @@ pn_sample_put() {
 # Metrics Catalog (id|name|unit|type|group|desc)
 #   Stored as global string, queried via pure bash
 # ---------------------------------------------------------------------------
-PN_METRIC_CATALOG="load|System Load (1m)|-|num|Core|1/5/15 minute load average, default threshold = CPU cores
+PN_METRIC_CATALOG_EN="load|System Load (1m)|-|num|Core|1/5/15 minute load average, default threshold = CPU cores
 cpu|CPU Utilization|%|num|Core|Non-idle CPU usage during 1-second sampling window
 iowait|I/O Wait Ratio|%|num|Core|CPU wait time on disk I/O; sustained high values indicate disk bottleneck
 mem|Memory Usage|%|num|Core|Calculated using MemAvailable
@@ -102,7 +102,42 @@ ntp|Time Sync|-|chk|Security|NTP clock synchronization status
 smart|Disk S.M.A.R.T.|-|chk|Hardware|Drive health self-test (requires smartctl)
 quota|PushNova Account Quota|%|num|Product|Used quota percentage warning"
 
-pn_metric_catalog() { printf '%s\n' "$PN_METRIC_CATALOG"; }
+PN_METRIC_CATALOG_ZH="load|系统负载(1分钟)|-|num|核心|1/5/15 分钟负载均值，默认阈值 = CPU 核数
+cpu|CPU 使用率|%|num|核心|采样 1 秒非空闲占比
+iowait|IO 等待占比|%|num|核心|CPU 等待磁盘 IO 占比，持续偏高说明磁盘瓶颈
+mem|内存使用率|%|num|核心|基于 MemAvailable 计算
+swap|Swap 使用率|%|num|核心|Swap 偏高通常意味着物理内存不足
+disk|磁盘使用率|%|num|核心|所有真实挂载点中的最高使用率
+inode|inode 使用率|%|num|核心|inode 耗尽会导致无法创建新文件
+net|网络吞吐|Mbps|num|核心|全部物理网卡收发之和
+conn|TCP 连接数|-|num|核心|ESTABLISHED + TIME_WAIT 连接数
+proc|进程总数|-|num|核心|当前系统进程数
+zombie|僵尸进程数|-|num|核心|未被父进程回收的僵尸进程
+container|容器运行状态|-|chk|核心|Docker / Podman 容器运行与停止统计
+reboot|重启事件|-|chk|核心|比对 boot_id，检测到重启时告警
+temp|CPU 温度|℃|num|硬件|热区/硬件监控传感器峰值温度
+uptime|运行时长|天|num|硬件|系统持续运行天数
+service|关键服务存活|-|chk|可用性|systemctl / openrc 服务状态
+port|端口连通性|-|chk|可用性|TCP 端口连通性探测
+http|HTTP 可用性|-|chk|可用性|HTTP URL 状态码与耗时探测
+http_latency|HTTP 响应耗时|ms|num|可用性|所有探测 URL 中的最大响应耗时
+ping|主机连通性|-|chk|可用性|ICMP 连通性与丢包探测
+ping_latency|Ping 延迟|ms|num|可用性|所有探测主机中的最大 RTT
+cert|TLS 证书有效期|天|num|安全|HTTPS 证书距离到期剩余天数
+log|日志异常关键词|-|chk|安全|时间窗口内命中异常关键词则告警
+ntp|时钟同步|-|chk|安全|NTP 时钟同步状态
+smart|磁盘 SMART|-|chk|硬件|硬盘健康自检（需 smartctl）
+quota|PushNova 账号额度|%|num|产品|账号额度使用百分比预警"
+
+PN_METRIC_CATALOG="$PN_METRIC_CATALOG_EN"
+
+pn_metric_catalog() {
+  if pn_is_zh; then
+    printf '%s\n' "$PN_METRIC_CATALOG_ZH"
+  else
+    printf '%s\n' "$PN_METRIC_CATALOG_EN"
+  fi
+}
 
 pn_metric_meta() {
   # pn_metric_meta <field> <id>: label|unit|kind|group|desc (pure bash query)

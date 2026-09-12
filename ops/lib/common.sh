@@ -10,6 +10,20 @@
 
 : "${PN_OPS_VERSION:=1.0.0}"
 : "${PN_OPS_NAME:=pushnova-ops}"
+: "${PN_OPS_LANG:=en}"
+
+pn_is_zh() {
+  case "${PN_OPS_LANG:-en}" in
+    zh|zh_*|zh-*|cn|CN) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+pn_t() {
+  # pn_t <en_string> <zh_string>
+  if pn_is_zh; then printf '%s' "$2"; else printf '%s' "$1"; fi
+}
+
 
 # ---------------------------------------------------------------------------
 # Path Resolution
@@ -385,7 +399,7 @@ pn_choose() {
     i=$((i + 1))
   done
   while :; do
-    ans=$(pn_read_line "Please choose an index" "$default")
+    ans=$(pn_read_line "$(pn_t 'Please choose an index' '请输入序号')" "$default")
     if pn_is_int "$ans" && [ "$ans" -ge 1 ] && [ "$ans" -lt "$i" ]; then
       i=1
       for opt in "$@"; do
@@ -393,7 +407,7 @@ pn_choose() {
         i=$((i + 1))
       done
     fi
-    printf '%s\n' "$(pn_c yellow 'Invalid input, please try again')" >&2
+    printf '%s\n' "$(pn_c yellow "$(pn_t 'Invalid input, please try again' '输入无效，请重新输入')")" >&2
     [ -z "$ans" ] && return 1
   done
 }
@@ -408,8 +422,8 @@ pn_multiselect() {
     i=$((i + 1))
   done
   local total=$((i - 1))
-  printf '%s\n' "$(pn_c dim "Enter indices (comma/space-separated), a=all, Enter=default [$default]")" >&2
-  ans=$(pn_read_line "Selection" "$default")
+  printf '%s\n' "$(pn_c dim "$(pn_t "Enter indices (comma/space-separated), a=all, Enter=default [$default]" "输入序号（逗号或空格分隔），a=全选，回车默认 [$default]")")" >&2
+  ans=$(pn_read_line "$(pn_t 'Selection' '选择项')" "$default")
   case "$(pn_lower "$ans")" in
     a|all)
       ans=""
@@ -436,7 +450,7 @@ pn_lock() {
   local oldpid
   oldpid=$(cat "$PN_LOCK_DIR/pid" 2>/dev/null || echo "")
   if [ -n "$oldpid" ] && kill -0 "$oldpid" 2>/dev/null; then
-    pn_warn "Previous task (PID $oldpid) is still running, skipping this round"
+    pn_warn "$(pn_t "Previous task (PID $oldpid) is still running, skipping this round" "上一次任务（PID $oldpid）仍在运行中，跳过本次")"
     return 1
   fi
   rm -rf "$PN_LOCK_DIR" 2>/dev/null || true
@@ -444,7 +458,7 @@ pn_lock() {
     printf '%s' "$$" >"$PN_LOCK_DIR/pid" 2>/dev/null || true
     return 0
   fi
-  pn_warn "Cannot acquire lock $PN_LOCK_DIR"
+  pn_warn "$(pn_t "Cannot acquire lock $PN_LOCK_DIR" "无法获取文件锁 $PN_LOCK_DIR")"
   return 1
 }
 
@@ -497,13 +511,22 @@ pn_uptime_days() {
 pn_uptime_human() {
   local sec="${1:-0}"
   if awk -v s="$sec" 'BEGIN{exit !(s>0)}'; then
-    awk -v s="$sec" 'BEGIN{
-      d=int(s/86400); h=int((s%86400)/3600); m=int((s%3600)/60);
-      if (d>0) printf "%dd %dh", d, h;
-      else if (h>0) printf "%dh %dm", h, m;
-      else printf "%dm", m;
-    }'
+    if pn_is_zh; then
+      awk -v s="$sec" 'BEGIN{
+        d=int(s/86400); h=int((s%86400)/3600); m=int((s%3600)/60);
+        if (d>0) printf "%d天%d小时", d, h;
+        else if (h>0) printf "%d小时%d分", h, m;
+        else printf "%d分钟", m;
+      }'
+    else
+      awk -v s="$sec" 'BEGIN{
+        d=int(s/86400); h=int((s%86400)/3600); m=int((s%3600)/60);
+        if (d>0) printf "%dd %dh", d, h;
+        else if (h>0) printf "%dh %dm", h, m;
+        else printf "%dm", m;
+      }'
+    fi
   else
-    printf '%s days' "${pn_uptime_days}"
+    if pn_is_zh; then printf '%s 天' "$(pn_uptime_days)"; else printf '%s days' "$(pn_uptime_days)"; fi
   fi
 }

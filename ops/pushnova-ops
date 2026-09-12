@@ -91,6 +91,7 @@ fi
 # ---------------------------------------------------------------------------
 # Argument Parsing (CLI > Env > Config > Defaults)
 # ---------------------------------------------------------------------------
+PN_FLAG_LANG=""
 PN_FLAG_JSON=0
 PN_FLAG_YES=0
 PN_FLAG_NO_TEST=0
@@ -105,7 +106,68 @@ PN_ARGS=""
 PN_TAIL=""
 
 pn_usage() {
-  cat <<EOF
+  if pn_is_zh; then
+    cat <<EOF
+$(pn_c bold 'PushNova Ops v'"$PN_OPS_VERSION") · 服务器运维监控与消息推送工具
+
+$(pn_c bold '用法')
+  $PN_OPS_NAME <命令> [选项]
+
+$(pn_c bold '常用命令')
+  install, wizard      运行交互式 CLI 配置向导
+  report               立即巡检服务器指标并推送日报卡片
+  check                运行异常检测 (仅在触发告警或恢复时推送)
+  run                  执行一次完整巡检周期: 同时执行巡检与告警检查
+  send                 手动发送自定义通知 (-t 标题 -m 内容)
+  test                 发送一条测试通知验证推送链路
+  collect              仅在本地采集并展示指标数据 (不推送)
+  targets              查看账号下可用的设备、主题和群组
+  config               查看与管理配置: show | path | get KEY | set KEY VALUE | edit
+  cron                 定时任务调度: install | remove | status
+  logs                 查看执行日志 (--push 查看推送流水)
+  flush                重试发送本地队列中失败的推送
+  doctor               运行环境与网络诊断 (依赖、网络、Token、调度器)
+  uninstall            卸载运维工具 (--purge 同时删除配置与状态数据)
+  version | help
+
+$(pn_c bold '选项')
+  --lang <en|zh>             界面语言 (en 英文 / zh 简体中文)
+  --api-key <pn_ak_...>      发送者凭证 (API Key)
+  --gateway <url>            推送网关地址，默认 https://pushnova.ezcloud.ltd/v1
+  --target-mode <mode>       目标模式: device | topic | group | account
+  --target <value>           设备 Token / 主题名 / 群组名
+  --metrics "<list>"         监控指标列表，如 "load cpu mem disk"
+  --report-template <name>   日报模版: standard | rich | metric | table | compact
+  --alert-template <name>    告警模版: storm | standard | rich | compact
+  --priority <level>         优先级: NORMAL | HIGH | EMERGENCY
+  --interval <minutes>       异常巡检轮询间隔 (分钟)
+  --scheduler <type>         定时调度器类型: cron | systemd | none | auto
+  --proxy <url>              HTTP 代理 (如 http://proxy:8080)
+  --dry-run                  本地渲染 Payload，不向网关发起请求
+  --quiet                    静默模式 (适用于 cron，仅写入日志)
+  --json                     以 JSON 格式输出指标采集结果
+  -y, --yes                  非交互模式 (适用于 CI / 自动化运维脚本)
+  --no-test                  安装过程中跳过发送测试消息
+  --no-schedule              安装过程中不创建定时调度任务
+  -h, --help                 查看帮助信息
+
+$(pn_c bold '示例')
+  # 快速安装 (交互式向导)
+  curl -fsSL https://raw.githubusercontent.com/netproxy/pushnova/main/ops/install.sh | bash
+
+  # 非交互安装: 推送至主题 'ops_alerts'，每5分钟巡检，每天09:00推送日报
+  $PN_OPS_NAME install -y --lang zh --api-key pn_ak_live_xxx --target-mode topic --target ops_alerts \
+      --metrics "load cpu mem disk conn service log" --scheduler cron
+
+  # 发送高优先级告警
+  $PN_OPS_NAME send -t "数据库主从切换" -m "主从切换已完成" --priority EMERGENCY
+
+  # 发送带快捷审批按钮的互动卡片 (HITL)
+  $PN_OPS_NAME send -t "重启 nginx?" -m "检测到内存占用过高" --type hitl \
+      --actions "APPROVE:批准重启:PRIMARY,REJECT:忽略:DESTRUCTIVE" --timeout 300
+EOF
+  else
+    cat <<EOF
 $(pn_c bold 'PushNova Ops v'"$PN_OPS_VERSION") · Server Operations Monitoring & Push Tool
 
 $(pn_c bold 'Usage')
@@ -129,6 +191,7 @@ $(pn_c bold 'Commands')
   version | help
 
 $(pn_c bold 'Options')
+  --lang <en|zh>             Language (en English / zh Simplified Chinese)
   --api-key <pn_ak_...>      Sender Token (API Key)
   --gateway <url>            Gateway URL, default https://pushnova.ezcloud.ltd/v1
   --target-mode <mode>       device | topic | group | account
@@ -163,11 +226,14 @@ $(pn_c bold 'Examples')
   $PN_OPS_NAME send -t "Restart nginx?" -m "High memory usage detected" --type hitl \
       --actions "APPROVE:Approve Restart:PRIMARY,REJECT:Dismiss:DESTRUCTIVE" --timeout 300
 EOF
+  fi
 }
 
 pn_parse_args() {
   while [ $# -gt 0 ]; do
     case "$1" in
+      --lang) PN_FLAG_LANG=${2:-}; shift 2 ;;
+      --lang=*) PN_FLAG_LANG=${1#*=}; shift ;;
       --api-key|--token|--api-key=*)
         case "$1" in
           *=*) PN_OPS_API_KEY=${1#*=}; shift ;;
@@ -278,7 +344,7 @@ pn_flow_push_alert() {
       return $?
     fi
     if [ "$force" != "1" ]; then
-      pn_info "No push required, silenced (no new anomalies or within cooldown period)"
+      pn_info "$(pn_t "No push required, silenced (no new anomalies or within cooldown period)" "指标正常或处于静默期，无需推送")"
       return 0
     fi
     tpl=${PN_FLAG_TEMPLATE:-${PN_OPS_ALERT_TEMPLATE:-standard}}
@@ -308,9 +374,9 @@ cmd_report() {
     pn_collect_print_json
   elif ! pn_bool "${PN_OPS_QUIET:-0}"; then
     pn_format_lines
-    printf '\n%s\n' "$(pn_c bold "Overview: $(pn_findings_counts)")"
+    printf '\n%s\n' "$(pn_c bold "$(pn_t "Overview: " "健康概览: ")$(pn_findings_counts)")"
   fi
-  pn_ok "Inspection finished: $(pn_findings_counts)"
+  pn_ok "$(pn_t "Inspection finished: " "巡检完成: ")$(pn_findings_counts)"
   pn_flow_push_report
   pn_unlock
 }
@@ -470,115 +536,115 @@ cmd_flush() {
 
 cmd_doctor() {
   local fails=0 warns=0
-  pn_banner "PushNova Ops Environment Diagnostics v$PN_OPS_VERSION"
-  printf '  %-22s %s\n' 'Host' "$(pn_hostname) · $(pn_primary_ip)"
-  printf '  %-22s %s\n' 'OS' "$(pn_os_pretty) · Kernel $(pn_kernel) · $(pn_cores) cores"
-  printf '  %-22s %s\n' 'Time / Zone' "$(pn_time_str) $(date '+%Z' 2>/dev/null || echo '')"
-  printf '  %-22s %s\n' 'Bash Version' "${BASH_VERSION}"
-  printf '  %-22s %s\n' 'Current User' "$(id -un 2>/dev/null || echo unknown) ($(pn_is_root && echo root || echo non-root))"
+  pn_banner "$(pn_t "PushNova Ops Environment Diagnostics v$PN_OPS_VERSION" "PushNova Ops 环境与配置诊断 v$PN_OPS_VERSION")"
+  printf '  %-22s %s\n' "$(pn_t 'Host' '主机名 / IP')" "$(pn_hostname) · $(pn_primary_ip)"
+  printf '  %-22s %s\n' "$(pn_t 'OS' '系统 / 内核')" "$(pn_os_pretty) · Kernel $(pn_kernel) · $(pn_cores) $(pn_t "cores" "核心")"
+  printf '  %-22s %s\n' "$(pn_t 'Time / Zone' '时间 / 时区')" "$(pn_time_str) $(date '+%Z' 2>/dev/null || echo '')"
+  printf '  %-22s %s\n' "$(pn_t 'Bash Version' 'Bash 版本')" "${BASH_VERSION}"
+  printf '  %-22s %s\n' "$(pn_t 'Current User' '当前用户')" "$(id -un 2>/dev/null || echo unknown) ($(pn_is_root && pn_t "root" "管理员 root" || pn_t "non-root" "普通用户"))"
 
-  pn_banner "Dependencies"
+  pn_banner "$(pn_t "Dependencies" "依赖命令检测")"
   local t
   for t in curl awk sed grep; do
-    if pn_have "$t"; then printf '  %-22s %s\n' "$t" "$(pn_c green Ready)"
-    else printf '  %-22s %s\n' "$t" "$(pn_c red Missing)"; fails=$((fails + 1)); fi
+    if pn_have "$t"; then printf '  %-22s %s\n' "$t" "$(pn_c green "$(pn_t "Ready" "就绪")")"
+    else printf '  %-22s %s\n' "$t" "$(pn_c red "$(pn_t "Missing" "缺失")")"; fails=$((fails + 1)); fi
   done
   for t in jq openssl ping nc smartctl crontab systemctl; do
-    if pn_have "$t"; then printf '  %-22s %s\n' "$t" "$(pn_c green Ready)"
-    else printf '  %-22s %s\n' "$t" "$(pn_c yellow 'Not installed (Optional)')"; warns=$((warns + 1)); fi
+    if pn_have "$t"; then printf '  %-22s %s\n' "$t" "$(pn_c green "$(pn_t "Ready" "就绪")")"
+    else printf '  %-22s %s\n' "$t" "$(pn_c yellow "$(pn_t "Not installed (Optional)" "未安装 (可选)")")"; warns=$((warns + 1)); fi
   done
 
-  pn_banner "Configuration"
-  printf '  %-22s %s\n' 'Config File' "$(pn_conf_path)"
+  pn_banner "$(pn_t "Configuration" "配置文件与运行状态")"
+  printf '  %-22s %s\n' "$(pn_t 'Config File' '配置文件路径')" "$(pn_conf_path)"
   if [ -f "$(pn_conf_path)" ]; then
     local mode
     mode=$(ls -l "$(pn_conf_path)" 2>/dev/null | awk '{print $1}')
-    printf '  %-22s %s\n' 'File Permissions' "$mode"
+    printf '  %-22s %s\n' "$(pn_t 'File Permissions' '文件权限')" "$mode"
     case "$mode" in
       *rw-------*|*rw-r-----*) ;;
-      *) printf '  %-22s %s\n' '' "$(pn_c yellow 'Recommend chmod 600 to protect Token')"; warns=$((warns + 1)) ;;
+      *) printf '  %-22s %s\n' '' "$(pn_c yellow "$(pn_t "Recommend chmod 600 to protect Token" "建议 chmod 600 保护 Token 安全")")"; warns=$((warns + 1)) ;;
     esac
   else
-    printf '  %-22s %s\n' '' "$(pn_c yellow 'Not configured yet, please run install')"
+    printf '  %-22s %s\n' '' "$(pn_c yellow "$(pn_t "Not configured yet, please run install" "尚未配置，请先运行 pushnova-ops install")")"
   fi
-  printf '  %-22s %s\n' 'State Directory' "$(pn_state_dir)"
+  printf '  %-22s %s\n' "$(pn_t 'State Directory' '状态目录')" "$(pn_state_dir)"
   if ! mkdir -p "$(pn_state_dir)" 2>/dev/null; then
-    printf '  %-22s %s\n' '' "$(pn_c red 'Cannot create state directory')"; fails=$((fails + 1))
+    printf '  %-22s %s\n' '' "$(pn_c red "$(pn_t "Cannot create state directory" "无法创建状态目录")")"; fails=$((fails + 1))
   fi
-  printf '  %-22s %s\n' 'Sender Token' "$(pn_masked "${PN_OPS_API_KEY:-Not set}")"
-  printf '  %-22s %s\n' 'Target Mode' "$(pn_target_desc)"
-  printf '  %-22s %s\n' 'Metrics' "${PN_OPS_METRICS:-(empty)}"
+  printf '  %-22s %s\n' "$(pn_t 'Sender Token' '发送者凭证')" "$(pn_masked "${PN_OPS_API_KEY:-Not set}")"
+  printf '  %-22s %s\n' "$(pn_t 'Target Mode' '推送目标')" "$(pn_target_desc)"
+  printf '  %-22s %s\n' "$(pn_t 'Metrics' '已选监控指标')" "${PN_OPS_METRICS:-(empty)}"
 
-  pn_banner "Network & Authentication"
+  pn_banner "$(pn_t "Network & Authentication" "网络连通与认证")"
   if pn_bool "${PN_OPS_DRY_RUN:-0}"; then
-    pn_info "dry-run mode, skipping network check"
+    pn_info "$(pn_t "dry-run mode, skipping network check" "dry-run 模式，跳过网络检测")"
   elif [ "${PN_OPS_MOCK:-0}" = "1" ]; then
-    pn_info "mock mode, skipping network check"
+    pn_info "$(pn_t "mock mode, skipping network check" "mock 模式，跳过网络检测")"
   else
     if pn_api_health; then
-      printf '  %-22s %s\n' 'Gateway Reachable' "$(pn_c green "OK (HTTP $PN_HTTP_CODE)")"
+      printf '  %-22s %s\n' "$(pn_t 'Gateway Reachable' '网关连通性')" "$(pn_c green "OK (HTTP $PN_HTTP_CODE)")"
     else
-      printf '  %-22s %s\n' 'Gateway Reachable' "$(pn_c red "FAILED (HTTP $PN_HTTP_CODE): $(printf '%s' "$PN_HTTP_BODY" | cut -c1-80)")"
+      printf '  %-22s %s\n' "$(pn_t 'Gateway Reachable' '网关连通性')" "$(pn_c red "FAILED (HTTP $PN_HTTP_CODE): $(printf '%s' "$PN_HTTP_BODY" | cut -c1-80)")"
       fails=$((fails + 1))
     fi
     if pn_token_check; then
-      printf '  %-22s %s\n' 'Token Verification' "$(pn_c green "$PN_TOKEN_SUMMARY")"
+      printf '  %-22s %s\n' "$(pn_t 'Token Verification' 'Token 有效性')" "$(pn_c green "$PN_TOKEN_SUMMARY")"
     else
-      printf '  %-22s %s\n' 'Token Verification' "$(pn_c red 'Failed')"
+      printf '  %-22s %s\n' "$(pn_t 'Token Verification' 'Token 有效性')" "$(pn_c red "$(pn_t "Failed" "验证失败")")"
       fails=$((fails + 1))
     fi
   fi
 
-  pn_banner "Collection & Payload"
+  pn_banner "$(pn_t "Collection & Payload" "指标采集与报文测试")"
   pn_collect_all "${PN_OPS_METRICS:-load cpu mem disk}"
   pn_rules_evaluate
-  printf '  %-22s %s\n' 'Collected Metrics' "$(pn_result_count) items"
-  printf '  %-22s %s\n' 'Evaluation' "$(pn_findings_counts)"
+  printf '  %-22s %s\n' "$(pn_t 'Collected Metrics' '采集指标数量')" "$(pn_result_count) $(pn_t "items" "项")"
+  printf '  %-22s %s\n' "$(pn_t 'Evaluation' '健康评估结果')" "$(pn_findings_counts)"
   local payload
   if payload=$(pn_build_payload report "${PN_OPS_REPORT_TEMPLATE:-standard}" NORMAL); then
-    printf '  %-22s %s\n' 'Payload Building' "$(pn_c green "Success ($(wc -c <"$payload" | tr -d ' ') bytes)")"
+    printf '  %-22s %s\n' "$(pn_t 'Payload Building' '报文渲染构建')" "$(pn_c green "$(pn_t "Success" "成功") ($(wc -c <"$payload" | tr -d ' ') bytes)")"
     pn_debug "payload: $(cat "$payload")"
   else
-    printf '  %-22s %s\n' 'Payload Building' "$(pn_c red Failed)"; fails=$((fails + 1))
+    printf '  %-22s %s\n' "$(pn_t 'Payload Building' '报文渲染构建')" "$(pn_c red "$(pn_t "Failed" "失败")")"; fails=$((fails + 1))
   fi
 
-  pn_banner "Scheduled Tasks"
+  pn_banner "$(pn_t "Scheduled Tasks" "定时任务调度")"
   if [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
     pn_schedule_status_cron
     pn_schedule_status_systemd
   else
-    printf '  Non-Linux environment, skipping scheduler diagnostics\n'
+    printf '  %s\n' "$(pn_t "Non-Linux environment, skipping scheduler diagnostics" "非 Linux 环境，跳过调度器诊断")"
   fi
 
   pn_hr
   if [ "$fails" -gt 0 ]; then
-    printf '  %s\n\n' "$(pn_c red "Diagnostics failed: $fails critical error(s) / $warns warning(s)")"
+    printf '  %s\n\n' "$(pn_c red "$(pn_t "Diagnostics failed: $fails critical error(s) / $warns warning(s)" "环境诊断未通过: $fails 个严重错误 / $warns 个警告")")"
     return 1
   fi
-  printf '  %s\n\n' "$(pn_c green "Diagnostics passed ($warns optional warning(s))")"
+  printf '  %s\n\n' "$(pn_c green "$(pn_t "Diagnostics passed ($warns optional warning(s))" "环境诊断全部通过 ($warns 个可选警告)")")"
   return 0
 }
 
 cmd_uninstall() {
-  pn_banner "Uninstall PushNova Ops"
-  pn_info "Will remove: scheduled tasks"
-  pn_info "Will keep: configuration and state directory (use --purge to remove both)"
+  pn_banner "$(pn_t "Uninstall PushNova Ops" "卸载 PushNova Ops")"
+  pn_info "$(pn_t "Will remove: scheduled tasks" "将清理: 定时调度任务")"
+  pn_info "$(pn_t "Will keep: configuration and state directory (use --purge to remove both)" "将保留: 配置文件与运行状态目录 (使用 --purge 可一并删除)")"
   if ! pn_bool "$PN_FLAG_YES" && pn_has_tty; then
-    pn_confirm "Are you sure you want to uninstall?" n || { pn_info "Cancelled"; return 0; }
+    pn_confirm "$(pn_t "Are you sure you want to uninstall?" "确定要卸载 PushNova Ops 吗?")" n || { pn_info "$(pn_t "Cancelled" "已取消")"; return 0; }
   fi
   pn_schedule_remove
   if [ "$PN_FLAG_PURGE" = "1" ]; then
     rm -rf "$(pn_state_dir)" 2>/dev/null || true
     rm -f "$(pn_conf_path)" 2>/dev/null || true
-    pn_ok "Removed state directory and configuration file"
+    pn_ok "$(pn_t "Removed state directory and configuration file" "已删除状态目录与配置文件")"
   fi
   local prefix=${PN_OPS_INSTALL_PREFIX:-/opt/pushnova-ops}
   if [ "$(pn_home)" = "$prefix" ] || [ "$PN_OPS_SELFDIR" = "$prefix" ]; then
     rm -f /usr/local/bin/pushnova-ops 2>/dev/null || true
     rm -rf "$prefix" 2>/dev/null || true
-    pn_ok "Removed installation directory $prefix"
+    pn_ok "$(pn_t "Removed installation directory $prefix" "已删除程序目录 $prefix")"
   fi
-  pn_ok "Uninstall completed"
+  pn_ok "$(pn_t "Uninstall completed" "卸载完成")"
   return 0
 }
 
@@ -588,13 +654,17 @@ cmd_uninstall() {
 main() {
   pn_parse_args "$@"
   pn_conf_load
+  if [ -n "${PN_FLAG_LANG:-}" ]; then
+    PN_OPS_LANG=$PN_FLAG_LANG
+    export PN_OPS_LANG
+  fi
 
   if [ -z "$PN_CMD" ]; then
     if pn_has_tty; then
       pn_usage
       exit 0
     fi
-    pn_error "Missing command, use --help for usage"
+    pn_error "$(pn_t "Missing command, use --help for usage" "缺少命令参数，请使用 --help 查看用法")"
     exit 2
   fi
 

@@ -10,6 +10,7 @@ PN_OPS_CONF_VERSION=1
 # Keys persisted to disk (written in this exact order)
 pn_conf_keys() {
   cat <<'EOF'
+PN_OPS_LANG
 PN_OPS_GATEWAY
 PN_OPS_API_KEY
 PN_OPS_TARGET_MODE
@@ -87,6 +88,7 @@ pn_conf_defaults() {
   local cores
   cores=$(pn_cores)
 
+  : "${PN_OPS_LANG:=en}"
   : "${PN_OPS_GATEWAY:=https://pushnova.ezcloud.ltd/v1}"
   : "${PN_OPS_API_KEY:=}"
   : "${PN_OPS_TARGET_MODE:=account}"      # device | topic | group | account
@@ -272,41 +274,82 @@ pn_th_set() {
 # Configuration Display
 # ---------------------------------------------------------------------------
 pn_target_desc() {
-  case "${PN_OPS_TARGET_MODE:-account}" in
-    device) printf 'Device Unicast → %s' "$(pn_masked "${PN_OPS_TARGET:-Not Set}")" ;;
-    topic)  printf 'Channel Broadcast → %s' "${PN_OPS_TARGET:-Not Set}" ;;
-    group)  printf 'Group Multicast → %s' "${PN_OPS_TARGET:-Not Set}" ;;
-    account) printf 'Account Broadcast (all devices under token)' ;;
-    *)      printf '%s' "${PN_OPS_TARGET_MODE:-Not Set}" ;;
-  esac
+  if pn_is_zh; then
+    case "${PN_OPS_TARGET_MODE:-account}" in
+      device)  printf '手机单播 → %s' "$(pn_masked "${PN_OPS_TARGET:-未配置}")" ;;
+      topic)   printf '频道广播 → %s' "${PN_OPS_TARGET:-未配置}" ;;
+      group)   printf '群组群发 → %s' "${PN_OPS_TARGET:-未配置}" ;;
+      account) printf '全账号广播（该 Token 下全部手机）' ;;
+      *)       printf '%s' "${PN_OPS_TARGET_MODE:-未配置}" ;;
+    esac
+  else
+    case "${PN_OPS_TARGET_MODE:-account}" in
+      device)  printf 'Device Unicast → %s' "$(pn_masked "${PN_OPS_TARGET:-Not Set}")" ;;
+      topic)   printf 'Channel Broadcast → %s' "${PN_OPS_TARGET:-Not Set}" ;;
+      group)   printf 'Group Multicast → %s' "${PN_OPS_TARGET:-Not Set}" ;;
+      account) printf 'Account Broadcast (all devices under token)' ;;
+      *)       printf '%s' "${PN_OPS_TARGET_MODE:-Not Set}" ;;
+    esac
+  fi
 }
 
 pn_conf_show() {
   local k v
-  printf '\n%s\n' "$(pn_c bold 'Current Configuration')"
-  printf '%s\n' "$(pn_c dim "$(pn_conf_path)")"
-  pn_hr
-  printf '  %-26s %s\n' 'Gateway URL' "$PN_OPS_GATEWAY"
-  printf '  %-26s %s\n' 'Sender Token' "$(pn_masked "$PN_OPS_API_KEY")"
-  printf '  %-26s %s\n' 'Dispatch Mode' "$(pn_target_desc)"
-  printf '  %-26s %s\n' 'Monitored Metrics' "${PN_OPS_METRICS:-(none)}"
-  printf '  %-26s %s\n' 'Category' "$PN_OPS_CATEGORY"
-  printf '  %-26s %s\n' 'Report / Alert Template' "$PN_OPS_REPORT_TEMPLATE / $PN_OPS_ALERT_TEMPLATE"
-  printf '  %-26s %s\n' 'Priority (Report/Alert/Crit)' "$PN_OPS_PRIORITY_REPORT / $PN_OPS_PRIORITY_ALERT / $PN_OPS_PRIORITY_CRITICAL"
-  printf '  %-26s %s\n' 'Alert Repeat Interval (min)' "$PN_OPS_ALERT_REPEAT_MIN"
-  printf '  %-26s %s\n' 'Scheduler' "$PN_OPS_SCHEDULER"
-  printf '  %-26s %s\n' 'Report Cron' "$PN_OPS_REPORT_CRON"
-  printf '  %-26s %s\n' 'Alert Cron' "$PN_OPS_ALERT_CRON"
-  printf '  %-26s %s\n' 'Proxy' "${PN_OPS_PROXY:-(none)}"
-  pn_hr
-  printf '  %-26s %s\n' 'Service Checks' "${PN_OPS_SERVICES:-(auto-detect)}"
-  printf '  %-26s %s\n' 'Port Probes' "${PN_OPS_PORTS:-(none)}"
-  printf '  %-26s %s\n' 'HTTP Probes' "${PN_OPS_HTTP_URLS:-(none)}"
-  printf '  %-26s %s\n' 'Ping Probes' "${PN_OPS_PING_HOSTS:-(none)}"
-  printf '  %-26s %s\n' 'SSL Cert Domains' "${PN_OPS_CERT_HOSTS:-(none)}"
-  printf '  %-26s %s\n' 'Log Sources' "${PN_OPS_LOG_SOURCES:-(auto-detect)}"
-  printf '  %-26s %s\n' 'Log Keywords' "$PN_OPS_LOG_KEYWORDS"
-  printf '  %-26s %s\n' 'Thresholds' "${PN_OPS_THRESHOLDS:-(defaults)}"
-  printf '  %-26s %s\n' 'State Directory' "$(pn_state_dir)"
-  printf '\n'
+  if pn_is_zh; then
+    printf '\n%s\n' "$(pn_c bold '当前配置')"
+    printf '%s\n' "$(pn_c dim "$(pn_conf_path)")"
+    pn_hr
+    printf '  %-26s %s\n' '语言 (Language)' "${PN_OPS_LANG:-en}"
+    printf '  %-26s %s\n' '网关地址' "$PN_OPS_GATEWAY"
+    printf '  %-26s %s\n' '发送者 Token' "$(pn_masked "$PN_OPS_API_KEY")"
+    printf '  %-26s %s\n' '推送方式' "$(pn_target_desc)"
+    printf '  %-26s %s\n' '监控指标' "${PN_OPS_METRICS:-(无)}"
+    printf '  %-26s %s\n' '卡片业务分类' "$PN_OPS_CATEGORY"
+    printf '  %-26s %s\n' '报告 / 告警模板' "$PN_OPS_REPORT_TEMPLATE / $PN_OPS_ALERT_TEMPLATE"
+    printf '  %-26s %s\n' '优先级 (报告/告警/严重)' "$PN_OPS_PRIORITY_REPORT / $PN_OPS_PRIORITY_ALERT / $PN_OPS_PRIORITY_CRITICAL"
+    printf '  %-26s %s\n' '异常重复提醒间隔 (分)' "$PN_OPS_ALERT_REPEAT_MIN"
+    printf '  %-26s %s\n' '定时调度器' "$PN_OPS_SCHEDULER"
+    printf '  %-26s %s\n' '巡检报告 Cron' "$PN_OPS_REPORT_CRON"
+    printf '  %-26s %s\n' '异常监测 Cron' "$PN_OPS_ALERT_CRON"
+    printf '  %-26s %s\n' '网络代理' "${PN_OPS_PROXY:-(无)}"
+    pn_hr
+    printf '  %-26s %s\n' '服务探测' "${PN_OPS_SERVICES:-(自动探测)}"
+    printf '  %-26s %s\n' '端口探测' "${PN_OPS_PORTS:-(无)}"
+    printf '  %-26s %s\n' 'HTTP 探测' "${PN_OPS_HTTP_URLS:-(无)}"
+    printf '  %-26s %s\n' 'Ping 探测' "${PN_OPS_PING_HOSTS:-(无)}"
+    printf '  %-26s %s\n' 'TLS 证书域名' "${PN_OPS_CERT_HOSTS:-(无)}"
+    printf '  %-26s %s\n' '日志来源' "${PN_OPS_LOG_SOURCES:-(自动探测)}"
+    printf '  %-26s %s\n' '日志关键词' "$PN_OPS_LOG_KEYWORDS"
+    printf '  %-26s %s\n' '指标阈值' "${PN_OPS_THRESHOLDS:-(默认)}"
+    printf '  %-26s %s\n' '状态目录' "$(pn_state_dir)"
+    printf '\n'
+  else
+    printf '\n%s\n' "$(pn_c bold 'Current Configuration')"
+    printf '%s\n' "$(pn_c dim "$(pn_conf_path)")"
+    pn_hr
+    printf '  %-26s %s\n' 'Language' "${PN_OPS_LANG:-en}"
+    printf '  %-26s %s\n' 'Gateway URL' "$PN_OPS_GATEWAY"
+    printf '  %-26s %s\n' 'Sender Token' "$(pn_masked "$PN_OPS_API_KEY")"
+    printf '  %-26s %s\n' 'Dispatch Mode' "$(pn_target_desc)"
+    printf '  %-26s %s\n' 'Monitored Metrics' "${PN_OPS_METRICS:-(none)}"
+    printf '  %-26s %s\n' 'Category' "$PN_OPS_CATEGORY"
+    printf '  %-26s %s\n' 'Report / Alert Template' "$PN_OPS_REPORT_TEMPLATE / $PN_OPS_ALERT_TEMPLATE"
+    printf '  %-26s %s\n' 'Priority (Report/Alert/Crit)' "$PN_OPS_PRIORITY_REPORT / $PN_OPS_PRIORITY_ALERT / $PN_OPS_PRIORITY_CRITICAL"
+    printf '  %-26s %s\n' 'Alert Repeat Interval (min)' "$PN_OPS_ALERT_REPEAT_MIN"
+    printf '  %-26s %s\n' 'Scheduler' "$PN_OPS_SCHEDULER"
+    printf '  %-26s %s\n' 'Report Cron' "$PN_OPS_REPORT_CRON"
+    printf '  %-26s %s\n' 'Alert Cron' "$PN_OPS_ALERT_CRON"
+    printf '  %-26s %s\n' 'Proxy' "${PN_OPS_PROXY:-(none)}"
+    pn_hr
+    printf '  %-26s %s\n' 'Service Checks' "${PN_OPS_SERVICES:-(auto-detect)}"
+    printf '  %-26s %s\n' 'Port Probes' "${PN_OPS_PORTS:-(none)}"
+    printf '  %-26s %s\n' 'HTTP Probes' "${PN_OPS_HTTP_URLS:-(none)}"
+    printf '  %-26s %s\n' 'Ping Probes' "${PN_OPS_PING_HOSTS:-(none)}"
+    printf '  %-26s %s\n' 'SSL Cert Domains' "${PN_OPS_CERT_HOSTS:-(none)}"
+    printf '  %-26s %s\n' 'Log Sources' "${PN_OPS_LOG_SOURCES:-(auto-detect)}"
+    printf '  %-26s %s\n' 'Log Keywords' "$PN_OPS_LOG_KEYWORDS"
+    printf '  %-26s %s\n' 'Thresholds' "${PN_OPS_THRESHOLDS:-(defaults)}"
+    printf '  %-26s %s\n' 'State Directory' "$(pn_state_dir)"
+    printf '\n'
+  fi
 }
