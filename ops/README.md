@@ -53,8 +53,9 @@ Installation options:
 
 | Option | Description |
 | --- | --- |
+| `--lang <en|zh>` | Interface language (`en` English / `zh` Simplified Chinese, default `en`) |
 | `--prefix <dir>` | Installation directory, default `/opt/pushnova-ops` |
-| `--bin-dir <dir>` | Executable symlink directory, default `/usr/local/bin` |
+| `--bin-dir <dir>` | Executable symlink directory, default `/usr/local/bin` (`~/.local/bin` for non-root) |
 | `--src-url <url>` | Base URL for source files (offline / internal mirror) |
 | `--mirror` | Sequentially attempt mirror endpoints on download failure |
 | `--no-run` | Install files only, do not launch wizard |
@@ -65,23 +66,28 @@ Installation options:
 
 ## 2. Interactive Setup Wizard Steps
 
+The wizard supports both English and Simplified Chinese (defaults to English). Step 1 prompts you to select your preferred language; selecting Chinese instantly switches all remaining steps and all future CLI commands to Chinese:
+
 | Step | Content | Description |
 | --- | --- | --- |
-| 0 | Environment Self-check | Verifies dependencies, root privileges, optional tools (`jq`, `openssl`, `ping`, `crontab`, `systemctl`) |
-| 1 | Gateway URL | Default `https://pushnova.ezcloud.ltd/v1`, or custom self-hosted endpoint |
-| 2 | **Sender Token** | PushNova Console "API Key", format: `pn_ak_live_...`; verifies online and displays account quota/devices |
-| 3 | **Target Mode** | Device unicast / Channel broadcast / Group multicast / Account broadcast; lists available targets automatically |
-| 4 | Metrics Selection | Multiple choice (Enter to accept recommended defaults), detailed below |
-| 5 | Thresholds | Warning and critical threshold configuration for numeric metrics |
-| 6 | Probe Options | Services, ports, HTTP URLs, Ping hosts, SSL cert domains, error log keywords |
-| 7 | Templates & Category | Report template, alert template, recovery notification, card badge category, priority |
-| 8 | Scheduling | `cron` / `systemd timer` / manual; report frequency, check interval, and repeat cooldown |
-| 9 | Preview & Test | Previews local metrics collection and optionally sends a pipeline verification push |
+| 1 | **Language Selection** | English (default) or Simplified Chinese (`zh`); persists to `ops.conf` and switches all wizard steps & CLI outputs |
+| 2 | Environment Self-check | Verifies dependencies, root privileges, optional tools (`jq`, `openssl`, `ping`, `crontab`, `systemctl`) |
+| 3 | Gateway URL | Default `https://pushnova.ezcloud.ltd/v1`, or custom self-hosted endpoint |
+| 4 | **Sender Token** | PushNova Console "API Key", format: `pn_ak_live_...`; verifies online and displays account quota/devices |
+| 5 | **Target Mode** | Device unicast / Channel broadcast / Group multicast / Account broadcast; lists available targets automatically |
+| 6 | Metrics Selection | Multiple choice (Enter to accept recommended defaults), detailed below |
+| 7 | Thresholds | Warning and critical threshold configuration for numeric metrics |
+| 8 | Probe Options | Services, ports, HTTP URLs, Ping hosts, SSL cert domains, error log keywords |
+| 9 | Templates & Category | Report template, alert template, recovery notification, card badge category, priority |
+| 10 | Scheduling | `cron` / `systemd timer` / manual; report frequency, check interval, and repeat cooldown |
+| 11 | Preview & Test | Previews local metrics collection and optionally sends a pipeline verification push |
+| 12 | Save & Summary | Writes configuration to `ops.conf`, installs scheduled tasks, and displays common CLI commands |
 
 > Non-interactive automation mode (CI / Ansible / cloud-init):
 >
 > ```bash
 > pushnova-ops install -y \
+>   --lang zh \
 >   --api-key pn_ak_live_xxx \
 >   --target-mode topic --target ops_alerts \
 >   --metrics "load cpu mem disk conn service log quota" \
@@ -222,6 +228,7 @@ Override via environment variables: `PUSHNOVA_OPS_CONF`, `PUSHNOVA_OPS_STATE`, `
 
 | Symptom | Resolution |
 | --- | --- |
+| `command not found: pushnova-ops` | Non-root users install to `~/.local/bin`. If not in `$PATH`, run `export PATH="$HOME/.local/bin:$PATH"` (add to `~/.bashrc`). Root users install to `/usr/local/bin`. |
 | HTTP `401` on push | Invalid or revoked token: update via `pushnova-ops config set PN_OPS_API_KEY pn_ak_live_...` |
 | HTTP response `no_target` | Target mode has no recipients: check devices and topic subscriptions via `pushnova-ops targets` |
 | HTTP `429` rate limited | Plan limit reached: check quota in console or enable `quota` metric for early warning |

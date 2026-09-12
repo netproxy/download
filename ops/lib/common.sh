@@ -10,7 +10,6 @@
 
 : "${PN_OPS_VERSION:=1.0.0}"
 : "${PN_OPS_NAME:=pushnova-ops}"
-: "${PN_OPS_LANG:=en}"
 
 pn_is_zh() {
   case "${PN_OPS_LANG:-en}" in
@@ -331,7 +330,7 @@ PN_TTY_FD=""
 
 pn_init_tty() {
   [ -n "$PN_TTY_FD" ] && return 0
-  if [ -t 0 ]; then
+  if [ "${PN_MOCK_TTY:-0}" = "1" ] || [ -t 0 ]; then
     PN_TTY_FD=0
     return 0
   fi
