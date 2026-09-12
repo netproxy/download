@@ -55,7 +55,7 @@ templates/manual.tpl
 templates/test.tpl"
 
 # Optional files: download failure will not block installation
-OPTIONAL_FILES="README.md"
+OPTIONAL_FILES="README.md TUTORIAL.zh-CN.md"
 
 # ---------------------------------------------------------------------------
 # Output formatting

@@ -7,8 +7,11 @@ Sender Token -> Target Mode (Device / Topic / Group / Account) -> Select Metrics
              -> Set Thresholds -> Choose Templates -> Configure Scheduler -> Pipeline Self-test
 ```
 
+> 📘 **Chinese step-by-step tutorial (下载 / 安装 / 设置 全流程教程)**: [`TUTORIAL.zh-CN.md`](TUTORIAL.zh-CN.md)
+> —— 面向中文使用者的图文式教程：安装前准备、向导每一问怎么答、装完如何验收、配置项详解、批量部署与排障。
+
 * **Zero Heavy Dependencies**: Runs on standard `bash + curl + awk` without requiring Python, Node.js, or local databases (`jq` is optional for enhanced JSON handling).
-* **Comprehensive Telemetry & State Deduplication**: Collects 21 metric categories with an intelligent state machine: alerts only on state transitions, throttles repeated incidents during cooldown, and sends recovery notifications upon resolution.
+* **Comprehensive Telemetry & State Deduplication**: Collects 26 metric categories with an intelligent state machine: alerts only on state transitions, throttles repeated incidents during cooldown, and sends recovery notifications upon resolution.
 * **5 Native PushNova Card Templates**: Formatted to match PushNova mobile native card layouts (Plain text, Markdown tables, Telemetry metrics with sparklines, Structured matrix tables, and Alert storm folding), plus interactive HITL approval action cards.
 * **Flexible Automation**: Supports both `cron` and `systemd timer` schedulers with one-command installation and removal.
 * **Offline Verification**: Full `--dry-run` support allows offline rendering and assertion testing without network connectivity.
