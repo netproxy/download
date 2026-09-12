@@ -21,14 +21,14 @@
 ### 远程一键（推荐）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/netproxy/pushnova/main/ops/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/netproxy/download/main/ops/install.sh | bash
 ```
 
 网络受限时可换镜像或指定源：
 
 ```bash
 # 自动尝试 jsdelivr / ghproxy 镜像
-curl -fsSL https://raw.githubusercontent.com/netproxy/pushnova/main/ops/install.sh | bash -s -- --mirror
+curl -fsSL https://raw.githubusercontent.com/netproxy/download/main/ops/install.sh | bash -s -- --mirror
 
 # 或指定源码基地址（内网镜像站）
 bash install.sh --src-url http://your-mirror/ops
