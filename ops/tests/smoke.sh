@@ -101,6 +101,20 @@ assert_contains "version output" "$out" "pushnova-ops v"
 out=$(bash "$INSTALL" --help 2>&1)
 assert_contains "install.sh --help functional" "$out" "PushNova Ops"
 
+# --- Regression: invoking through a symlink must still find lib/common.sh ---
+# Real installs create /usr/local/bin/pushnova-ops or ~/.local/bin/pushnova-ops
+# as SYMLINKS to <prefix>/pushnova-ops. If the entrypoint does not follow the
+# link, dirname($0) points at the bin dir and the tool dies with
+# "library not found (lib/common.sh)".
+LINK_DIR="$WORK/fakebin"
+mkdir -p "$LINK_DIR"
+ln -sf "$PN" "$LINK_DIR/pushnova-ops"
+out=$(cd /tmp && "$LINK_DIR/pushnova-ops" version 2>&1)
+assert_contains "symlinked invocation resolves lib/ (version)" "$out" "pushnova-ops v"
+out=$(cd /tmp && PN_OPS_MOCK=1 PN_OPS_FIXTURE_DIR="$FIX_OK" PUSHNOVA_OPS_CONF="$WORK/link.conf" PUSHNOVA_OPS_STATE="$WORK/link-state" \
+  bash "$LINK_DIR/pushnova-ops" collect --api-key k --target-mode topic --target t --metrics "load" 2>&1)
+assert_contains "symlinked invocation runs a real command" "$out" "System Load"
+
 # ---------------------------------------------------------------------------
 section "2. Metrics Collection & Threshold Evaluation"
 out=$(run_ops_fix "$FIX_ALERT" collect $BASE_FLAGS --metrics "$METRICS_SMALL")

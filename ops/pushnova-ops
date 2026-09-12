@@ -14,19 +14,62 @@
 set -euo pipefail
 
 PN_OPS_VERSION="1.0.0"
-PN_OPS_SELFDIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo .)
+
+# ---------------------------------------------------------------------------
+# Resolve the REAL directory of this script.
+#   /usr/local/bin/pushnova-ops and ~/.local/bin/pushnova-ops are SYMLINKS to
+#   <prefix>/pushnova-ops. Without following the link, dirname($0) points at the
+#   bin directory, lib/ is not found, and the tool aborts with
+#   "library not found (lib/common.sh)". Walk the symlink chain instead.
+# ---------------------------------------------------------------------------
+pn_resolve_self_dir() {
+  local src=$1 dir
+  while [ -L "$src" ]; do
+    dir=$(cd -P "$(dirname "$src")" 2>/dev/null && pwd) || dir=$(dirname "$src")
+    src=$(readlink "$src" 2>/dev/null) || break
+    case "$src" in
+      /*) ;;
+      *) src="$dir/$src" ;;
+    esac
+  done
+  (cd -P "$(dirname "$src")" 2>/dev/null && pwd) || dirname "$src"
+}
+
+PN_OPS_SELFDIR=$(pn_resolve_self_dir "${BASH_SOURCE[0]:-$0}")
 if [ -d "$PN_OPS_SELFDIR/lib" ]; then
   : "${PUSHNOVA_OPS_HOME:=$PN_OPS_SELFDIR}"
 fi
 export PN_OPS_SELFDIR
 export PUSHNOVA_OPS_HOME="${PUSHNOVA_OPS_HOME:-}"
 
+# Library search path: explicit home first, then the real script dir, then the
+# standard user/root install locations.
 PN_LIB_DIR=""
-for _cand in "${PUSHNOVA_OPS_HOME:-}/lib" "$PN_OPS_SELFDIR/lib" /usr/local/lib/pushnova-ops /opt/pushnova-ops/lib; do
+for _cand in \
+  "${PUSHNOVA_OPS_HOME:-}/lib" \
+  "$PN_OPS_SELFDIR/lib" \
+  "${HOME:-}/.local/share/pushnova-ops/lib" \
+  "${HOME:-}/.local/lib/pushnova-ops" \
+  /usr/local/lib/pushnova-ops \
+  /opt/pushnova-ops/lib; do
   [ -n "$_cand" ] || continue
+  case "$_cand" in /*) ;; *) continue ;; esac
   if [ -f "$_cand/common.sh" ]; then PN_LIB_DIR=$_cand; break; fi
 done
-[ -n "$PN_LIB_DIR" ] || { echo "Error: PushNova Ops library not found (lib/common.sh)" >&2; exit 1; }
+
+if [ -z "$PN_LIB_DIR" ]; then
+  echo "Error: PushNova Ops library files not found (lib/common.sh missing)." >&2
+  echo "  Invoked as      : ${BASH_SOURCE[0]:-$0}" >&2
+  echo "  Resolved dir    : $PN_OPS_SELFDIR" >&2
+  echo "  PUSHNOVA_OPS_HOME: ${PUSHNOVA_OPS_HOME:-<unset>}" >&2
+  echo "  Fix options:" >&2
+  echo "    1) Reinstall:  curl -fsSL <install.sh url> | bash" >&2
+  echo "    2) Point at the install dir explicitly, then retry:" >&2
+  echo "         export PUSHNOVA_OPS_HOME=\"\$HOME/.local/share/pushnova-ops\"   # non-root install" >&2
+  echo "         export PUSHNOVA_OPS_HOME=/opt/pushnova-ops                    # root install" >&2
+  echo "    3) Verify the library exists: ls \"\$HOME/.local/share/pushnova-ops/lib/common.sh\"" >&2
+  exit 1
+fi
 
 # shellcheck source=/dev/null
 . "$PN_LIB_DIR/common.sh"

@@ -276,10 +276,45 @@ else
   run_priv ln -sf "$PREFIX/pushnova-ops" "$BIN_DIR/pushnova-ops" || c_warn "  Failed to create symlink, use $PREFIX/pushnova-ops directly"
 fi
 c_ok "  Command: $BIN_DIR/pushnova-ops"
-case ":$PATH:" in
-  *":$BIN_DIR:"*) ;;
-  *) c_warn "  $BIN_DIR is not in PATH. Run: export PATH=\"$BIN_DIR:\$PATH\" (or add to ~/.bashrc)" ;;
-esac
+
+# ---------------------------------------------------------------------------
+# Ensure BIN_DIR is on PATH (persistently, when we can)
+#   Only ~/.profile adds ~/.local/bin, and only if the directory already
+#   existed at login time — a fresh non-root install therefore ends up with a
+#   command that is not found until the next re-login. Fix it here.
+# ---------------------------------------------------------------------------
+if ! printf '%s' "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
+  c_warn "  $BIN_DIR is not in PATH yet"
+  # Pick the rc file of the user's login shell
+  RC_FILE=""
+  case "$(basename "${SHELL:-/bin/bash}")" in
+    zsh)  RC_FILE="$HOME/.zshrc" ;;
+    bash) RC_FILE="$HOME/.bashrc" ;;
+    *)    RC_FILE="$HOME/.profile" ;;
+  esac
+  PATH_LINE="export PATH=\"$BIN_DIR:\$PATH\""
+  if [ -n "$RC_FILE" ] && [ -f "$RC_FILE" ] && grep -qF "$BIN_DIR" "$RC_FILE" 2>/dev/null; then
+    c_ok "  Already configured in $RC_FILE"
+  else
+    DO_APPEND=0
+    if [ -t 0 ] && [ -t 1 ]; then
+      printf '  Add it to %s automatically? [Y/n] ' "${RC_FILE:-~/.bashrc}"
+      read -r answer || answer="n"
+      case "${answer:-y}" in
+        y|Y|yes|"") DO_APPEND=1 ;;
+      esac
+    fi
+    if [ "$DO_APPEND" = "1" ] && [ -n "$RC_FILE" ]; then
+      {
+        printf '\n# Added by PushNova Ops installer\n'
+        printf '%s\n' "$PATH_LINE"
+      } >>"$RC_FILE" 2>/dev/null && c_ok "  Added to $RC_FILE (takes effect in new shells)"
+    fi
+  fi
+  c_info "  Use it right now in this shell:"
+  c_info "    $PATH_LINE"
+  c_info "  Or call the full path: $BIN_DIR/pushnova-ops <command>"
+fi
 
 # ---------------------------------------------------------------------------
 # Launch Setup Wizard
