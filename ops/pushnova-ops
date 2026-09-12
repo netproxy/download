@@ -432,11 +432,11 @@ pn_collect_print_json() {
 cmd_send() {
   local title=${PN_FLAG_TITLE:-} message=${PN_FLAG_MESSAGE:-}
   if [ -z "$title" ] && pn_has_tty; then
-    title=$(pn_read_line "Notification Title" "PushNova Ops Notification")
+    title=$(pn_read_line "$(pn_t "Notification Title" "通知标题")" "$(pn_t "PushNova Ops Notification" "PushNova 运维通知")")
   fi
-  [ -n "$title" ] || title="PushNova Ops Notification"
+  [ -n "$title" ] || title="$(pn_t "PushNova Ops Notification" "PushNova 运维通知")"
   if [ -z "$message" ] && pn_has_tty; then
-    message=$(pn_read_line "Notification Message" "")
+    message=$(pn_read_line "$(pn_t "Notification Message" "通知正文")" "")
   fi
   [ -n "$message" ] || message="$title"
   PN_MANUAL_TITLE=$title
@@ -453,7 +453,7 @@ cmd_send() {
   fi
   PN_OVERALL=${PN_OVERALL:-ok}
   if [ "$tpl" = "hitl" ]; then
-    PN_MANUAL_ACTIONS_HINT="(Interactive buttons supported on mobile, response calls back your callback_url)"
+    PN_MANUAL_ACTIONS_HINT="$(pn_t "(Interactive buttons supported on mobile, response calls back your callback_url)" "（手机端支持交互操作按钮，响应将回调您的 callback_url）")"
   fi
   local payload
   payload=$(pn_build_payload manual "$tpl" "${PN_FLAG_PRIORITY_OVERRIDE:-${PN_OPS_PRIORITY_ALERT:-HIGH}}") || return 1

@@ -53,7 +53,17 @@ templates/storm.tpl
 templates/metric.tpl
 templates/table.tpl
 templates/manual.tpl
-templates/test.tpl"
+templates/test.tpl
+templates/standard.zh.tpl
+templates/compact.zh.tpl
+templates/rich.zh.tpl
+templates/alert.zh.tpl
+templates/recovery.zh.tpl
+templates/storm.zh.tpl
+templates/metric.zh.tpl
+templates/table.zh.tpl
+templates/manual.zh.tpl
+templates/test.zh.tpl"
 
 # Optional files: download failure will not block installation
 OPTIONAL_FILES="README.md TUTORIAL.zh-CN.md"

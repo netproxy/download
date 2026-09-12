@@ -31,10 +31,31 @@ pn_template_names() { echo "standard compact rich metric table storm hitl manual
 pn_template_path() {
   # Lookup in install_dir/templates, script_dir/templates, and ~/.config in order
   local name=$1 base
-  for base in "${PN_OPS_HOME:-}" "${PN_OPS_SELFDIR:-}" "$(pn_home)" "${XDG_CONFIG_HOME:-$HOME/.config}/pushnova-ops/templates"; do
+  for base in \
+    "${PUSHNOVA_OPS_HOME:-}" \
+    "${PN_OPS_HOME:-}" \
+    "${PN_OPS_SELFDIR:-}" \
+    "$(pn_home)" \
+    "/opt/pushnova-ops" \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/pushnova-ops" \
+    "${XDG_DATA_HOME:-$HOME/.local/share}/pushnova-ops"; do
     [ -n "$base" ] || continue
+    # Case 1: base has a templates/ subfolder
+    if pn_is_zh && [ -f "$base/templates/$name.zh.tpl" ]; then
+      printf '%s' "$base/templates/$name.zh.tpl"
+      return 0
+    fi
     if [ -f "$base/templates/$name.tpl" ]; then
       printf '%s' "$base/templates/$name.tpl"
+      return 0
+    fi
+    # Case 2: base is already the templates/ directory itself
+    if pn_is_zh && [ -f "$base/$name.zh.tpl" ]; then
+      printf '%s' "$base/$name.zh.tpl"
+      return 0
+    fi
+    if [ -f "$base/$name.tpl" ]; then
+      printf '%s' "$base/$name.tpl"
       return 0
     fi
   done
@@ -48,7 +69,6 @@ pn_template_require() {
     pn_warn "Template $name.tpl does not exist, fell back to standard template"
     p=$(pn_template_path standard || true)
   fi
-  [ -n "$p" ] || pn_die "No template files found; please check installation integrity"
   printf '%s' "$p"
 }
 
@@ -113,7 +133,7 @@ pn_tpl_fill_common() {
   pn_tpl_val DATE "$(date '+%Y-%m-%d' 2>/dev/null)"
   pn_tpl_val OS "$(pn_os_pretty)"
   pn_tpl_val KERNEL "$(pn_kernel)"
-  pn_tpl_val UPTIME "$(pn_uptime_days) days"
+  pn_tpl_val UPTIME "$(pn_uptime_days) $(pn_t "days" "天")"
   pn_tpl_val STATUS "$(pn_sev_cn "$overall")"
   pn_tpl_val STATUS_EMOJI "$(pn_sev_emoji "$overall")"
   pn_tpl_val SEVERITY "$(pn_sev_cn "$sev")"
@@ -129,42 +149,88 @@ pn_tpl_fill_common() {
   pn_tpl_val SUMMARY "$(pn_format_compact)"
   pn_tpl_val RECOVERED "$(pn_format_recovered)"
   pn_tpl_val MESSAGE "${PN_MANUAL_MESSAGE:-}"
-  pn_tpl_val TITLE "${PN_MANUAL_TITLE:-PushNova Ops Notification}"
+  pn_tpl_val TITLE "${PN_MANUAL_TITLE:-$(pn_t "PushNova Ops Notification" "PushNova Ops 运维通知")}"
   case "$event" in
-    report)   pn_tpl_val EVENT "Scheduled Inspection Report" ;;
-    alert)    pn_tpl_val EVENT "Incident Alert" ;;
-    recovery) pn_tpl_val EVENT "Recovery Notification" ;;
-    test)     pn_tpl_val EVENT "Installation Test" ;;
-    *)        pn_tpl_val EVENT "Manual Notification" ;;
+    report)   pn_tpl_val EVENT "$(pn_t "Scheduled Inspection Report" "定时巡检日报")" ;;
+    alert)    pn_tpl_val EVENT "$(pn_t "Incident Alert" "运行指标告警")" ;;
+    recovery) pn_tpl_val EVENT "$(pn_t "Recovery Notification" "故障恢复通知")" ;;
+    test)     pn_tpl_val EVENT "$(pn_t "Installation Test" "推送链路测试")" ;;
+    *)        pn_tpl_val EVENT "$(pn_t "Manual Notification" "自定义运维通知")" ;;
   esac
   pn_tpl_val PRIORITY "${PN_PAYLOAD_PRIORITY:-NORMAL}"
 }
 
 pn_format_recovered() {
   local f=${PN_DECISIONS:-}
-  [ -n "$f" ] && [ -f "$f" ] || { printf '(none)'; return 0; }
+  [ -n "$f" ] && [ -f "$f" ] || { printf '%s' "$(pn_t '(none)' '(无)')"; return 0; }
   local out
-  out=$(awk -F'\t' '$1=="RECOVERY" { printf "✅ %s recovered to normal\n", $4 }' "$f" 2>/dev/null)
-  [ -z "$out" ] && out="(none)"
+  if pn_is_zh; then
+    out=$(awk -F'\t' '$1=="RECOVERY" { printf "✅ %s 已恢复正常\n", $4 }' "$f" 2>/dev/null)
+  else
+    out=$(awk -F'\t' '$1=="RECOVERY" { printf "✅ %s recovered to normal\n", $4 }' "$f" 2>/dev/null)
+  fi
+  [ -z "$out" ] && out="$(pn_t '(none)' '(无)')"
   printf '%s' "$out"
+}
+
+pn_primary_finding_summary() {
+  local f=${PN_FINDINGS:-}
+  [ -n "$f" ] && [ -f "$f" ] && [ -s "$f" ] || return 0
+  local line label detail
+  line=$(awk -F'\t' '$1=="crit"{print $3 "\t" $4; exit}' "$f" 2>/dev/null)
+  [ -z "$line" ] && line=$(awk -F'\t' '$1=="warn"{print $3 "\t" $4; exit}' "$f" 2>/dev/null)
+  [ -z "$line" ] && return 0
+  label=$(printf '%s' "$line" | cut -f1)
+  detail=$(printf '%s' "$line" | cut -f2 | cut -d'·' -f1 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  if [ -n "$detail" ]; then
+    printf '%s (%s)' "$label" "$detail"
+  else
+    printf '%s' "$label"
+  fi
 }
 
 pn_auto_title() {
   # pn_auto_title <event> <severity>
-  local event=$1 sev=$2 host
+  local event=$1 sev=$2 host primary
   host=$(pn_hostname)
-  case "$event" in
-    report)
-      if [ "$sev" = "crit" ]; then printf '🔴 %s Inspection: Critical Alert' "$host"
-      elif [ "$sev" = "warn" ]; then printf '🟡 %s Inspection: Warning Alert' "$host"
-      else printf '📊 %s Server Inspection Report' "$host"; fi ;;
-    alert)
-      if [ "$sev" = "crit" ]; then printf '🚨 %s Critical Alert' "$host"
-      else printf '⚠️ %s Metric Alert' "$host"; fi ;;
-    recovery) printf '🟢 %s Recovered to Normal' "$host" ;;
-    test)     printf '✅ PushNova Ops Test Notification' ;;
-    *)        printf '%s' "${PN_MANUAL_TITLE:-PushNova Ops Notification}" ;;
-  esac
+  primary=$(pn_primary_finding_summary 2>/dev/null || true)
+  if pn_is_zh; then
+    case "$event" in
+      report)
+        if [ "$sev" = "crit" ]; then printf '🔴 %s 巡检: 严重告警' "$host"
+        elif [ "$sev" = "warn" ]; then printf '🟡 %s 巡检: 存在预警' "$host"
+        else printf '📊 %s 服务器巡检报告' "$host"; fi ;;
+      alert)
+        if [ -n "$primary" ]; then
+          if [ "$sev" = "crit" ]; then printf '🚨 %s 严重故障: %s' "$host" "$primary"
+          else printf '⚠️ %s 运行预警: %s' "$host" "$primary"; fi
+        else
+          if [ "$sev" = "crit" ]; then printf '🚨 %s 严重故障告警' "$host"
+          else printf '⚠️ %s 运行指标预警' "$host"; fi
+        fi ;;
+      recovery) printf '🟢 %s 运行指标已恢复正常' "$host" ;;
+      test)     printf '✅ PushNova Ops 链路测试通知' ;;
+      *)        printf '%s' "${PN_MANUAL_TITLE:-PushNova Ops 运维通知}" ;;
+    esac
+  else
+    case "$event" in
+      report)
+        if [ "$sev" = "crit" ]; then printf '🔴 %s Inspection: Critical Alert' "$host"
+        elif [ "$sev" = "warn" ]; then printf '🟡 %s Inspection: Warning Alert' "$host"
+        else printf '📊 %s Server Inspection Report' "$host"; fi ;;
+      alert)
+        if [ -n "$primary" ]; then
+          if [ "$sev" = "crit" ]; then printf '🚨 %s Critical: %s' "$host" "$primary"
+          else printf '⚠️ %s Warning: %s' "$host" "$primary"; fi
+        else
+          if [ "$sev" = "crit" ]; then printf '🚨 %s Critical Alert' "$host"
+          else printf '⚠️ %s Metric Alert' "$host"; fi
+        fi ;;
+      recovery) printf '🟢 %s Recovered to Normal' "$host" ;;
+      test)     printf '✅ PushNova Ops Test Notification' ;;
+      *)        printf '%s' "${PN_MANUAL_TITLE:-PushNova Ops Notification}" ;;
+    esac
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -301,7 +367,21 @@ pn_build_payload() {
     pn_tpl_val ACTIONS_HINT "${PN_MANUAL_ACTIONS_HINT:-}"
   fi
   body=$(pn_render_named "$body_tpl" 2>/dev/null || true)
-  [ -z "$body" ] && body="$title"
+  if [ -z "$body" ]; then
+    local findings_text
+    findings_text=$(pn_format_findings 2>/dev/null || true)
+    if [ -n "$findings_text" ]; then
+      body=$(printf '%s\n\n%s' "$title" "$findings_text")
+    else
+      local compact_text
+      compact_text=$(pn_format_compact 2>/dev/null || true)
+      if [ -n "$compact_text" ]; then
+        body=$(printf '%s\n\n%s' "$title" "$compact_text")
+      else
+        body="$title"
+      fi
+    fi
+  fi
 
   local rundir; rundir=$(pn_state_sub run)
   PN_PAYLOAD="$rundir/payload.$$.json"
@@ -345,9 +425,18 @@ pn_build_payload() {
 
 pn_fingerprint() {
   # Alert fingerprint: collapses identical events on the client
-  local event=$1 host
+  local event=$1 host primary_key=""
   host=$(pn_hostname | sed 's/[^A-Za-z0-9._-]/_/g')
-  printf 'pn_ops_%s_%s' "$host" "$event"
+  if [ "$event" = "alert" ] && [ -n "${PN_FINDINGS:-}" ] && [ -s "${PN_FINDINGS:-}" ]; then
+    primary_key=$(awk -F'\t' '$1=="crit"{print $2; exit}' "$PN_FINDINGS" 2>/dev/null)
+    [ -z "$primary_key" ] && primary_key=$(awk -F'\t' '$1=="warn"{print $2; exit}' "$PN_FINDINGS" 2>/dev/null)
+    primary_key=$(printf '%s' "$primary_key" | sed 's/[^A-Za-z0-9._-]/_/g')
+  fi
+  if [ -n "$primary_key" ]; then
+    printf 'pn_ops_%s_%s_%s' "$host" "$event" "$primary_key"
+  else
+    printf 'pn_ops_%s_%s' "$host" "$event"
+  fi
 }
 
 pn_hitl_fields() {

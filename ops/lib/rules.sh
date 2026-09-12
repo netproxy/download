@@ -335,7 +335,11 @@ EOF
 
 pn_format_markdown() {
   local kind id label value unit detail sev vtext d
-  printf '| Metric | Value | Status | Details |\n| --- | ---: | :---: | --- |\n'
+  if pn_is_zh; then
+    printf '| 指标名称 | 当前数值 | 状态 | 详细说明 |\n| --- | ---: | :---: | --- |\n'
+  else
+    printf '| Metric | Value | Status | Details |\n| --- | ---: | :---: | --- |\n'
+  fi
   while IFS="$(printf '\t')" read -r kind id label value unit detail; do
     [ "$kind" = "NUM" ] || continue
     sev=$(pn_num_severity "$id" "$value")

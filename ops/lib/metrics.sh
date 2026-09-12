@@ -31,6 +31,9 @@ pn_emit_num() {
   # Note: TAB is in IFS whitespace; fields cannot be empty except the last one.
   # Placeholder "-" is used when unit is empty.
   local id=$1 label=$2 value=$3 unit=$4 detail=${5:-}
+  local cat_label
+  cat_label=$(pn_metric_label "$id")
+  [ -n "$cat_label" ] && label=$cat_label
   case "$value" in ''|*[!0-9.eE+-]*) value=0 ;; esac
   [ -z "$unit" ] && unit=-
   printf 'NUM\t%s\t%s\t%s\t%s\t%s\n' "$id" "$(pn_clean_field "$label")" "$value" \
@@ -40,6 +43,9 @@ pn_emit_num() {
 pn_emit_chk() {
   # pn_emit_chk <id> <label> <status> <detail>
   local id=$1 label=$2 status=$3 detail=${4:-}
+  local cat_label
+  cat_label=$(pn_metric_label "$id")
+  [ -n "$cat_label" ] && label=$cat_label
   case "$status" in ok|warn|crit|na) ;; *) status=warn ;; esac
   printf 'CHK\t%s\t%s\t%s\t%s\n' "$id" "$(pn_clean_field "$label")" "$status" \
     "$(pn_clean_field "$detail")" >>"$PN_RESULTS"
@@ -156,7 +162,7 @@ pn_metric_meta() {
     esac
     return 0
   done <<EOF
-$PN_METRIC_CATALOG
+$(pn_metric_catalog)
 EOF
   return 0
 }

@@ -161,6 +161,15 @@ assert_not_contains "compact is single line summary without breakdown" "$out" "�
 # Template variables replaced
 assert_not_contains "all template placeholders filled" "$out" "{{"
 
+# Bilingual: Chinese payload check when PN_OPS_LANG=zh
+out_zh=$(PN_OPS_LANG=zh run_ops_fix "$FIX_OK" report $BASE_FLAGS --metrics "$METRICS_SMALL" --report-template standard --dry-run)
+assert_contains "zh report title in Chinese" "$out_zh" "服务器巡检报告"
+assert_contains "zh report metric label in Chinese" "$out_zh" "系统负载"
+assert_contains "zh report header in Chinese" "$out_zh" "核心指标清单"
+
+out_zh_test=$(PN_OPS_LANG=zh run_ops_fix "$FIX_OK" test $BASE_FLAGS --dry-run)
+assert_contains "zh test title in Chinese" "$out_zh_test" "PushNova Ops 链路测试通知"
+
 # ---------------------------------------------------------------------------
 section "4. Target Addressing (Device / Topic / Group / Account)"
 out=$(run_ops_fix "$FIX_OK" report --api-key pn_ak_live_t --target-mode device --target pn_tok_live_test --metrics "load" --dry-run)
