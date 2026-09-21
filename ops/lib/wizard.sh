@@ -116,24 +116,34 @@ pn_deps_ensure() {
 # 0. Language Selection
 # ---------------------------------------------------------------------------
 pn_wiz_language() {
-  pn_wiz_step "$(pn_t "Step 1 · Language Selection" "第 1 步 · 界面语言选择")"
-  pn_wiz_note "$(pn_t "Select language for setup wizard and future CLI commands" "选择向导和后续命令行工具的提示语言")"
+  pn_wiz_step "$(pn_t "Step 1 · Language Selection" "第 1 步 · 界面语言选择" "ステップ 1 · 言語の選択" "1단계 · 언어 선택")"
+  pn_wiz_note "$(pn_t "Select language for setup wizard and future CLI commands" "选择向导和后续命令行工具的提示语言" "ウィザードおよび今後のCLIコマンドで使用する言語を選択" "설정 마법사 및 향후 CLI 명령어에 사용할 언어를 선택하세요")"
   local cur_idx=1
-  if pn_is_zh; then cur_idx=2; fi
+  case "$(pn_lang)" in
+    zh) cur_idx=2 ;;
+    ja) cur_idx=3 ;;
+    ko) cur_idx=4 ;;
+    *) cur_idx=1 ;;
+  esac
   local choice
-  choice=$(pn_choose "Language / 语言" "$cur_idx" \
+  choice=$(pn_choose "Language / 言語 / 언어 / 语言" "$cur_idx" \
     "English (Default)" \
-    "简体中文 (Simplified Chinese)")
+    "简体中文 (Simplified Chinese)" \
+    "日本語 (Japanese)" \
+    "한국어 (Korean)")
   case "$choice" in
     *中文*|*Chinese*|[2]) PN_OPS_LANG="zh" ;;
+    *日本*|*Japanese*|[3]) PN_OPS_LANG="ja" ;;
+    *한국*|*Korean*|[4]) PN_OPS_LANG="ko" ;;
     *) PN_OPS_LANG="en" ;;
   esac
   export PN_OPS_LANG
-  if pn_is_zh; then
-    pn_ok "已切换至中文提示（配置将保存至 ops.conf，后续命令行默认使用中文）"
-  else
-    pn_ok "Language set to English (saved to ops.conf, future CLI commands will use English)"
-  fi
+  case "$PN_OPS_LANG" in
+    zh) pn_ok "已切换至中文提示（配置将保存至 ops.conf，后续命令行默认使用中文）" ;;
+    ja) pn_ok "日本語に切り替えました（ops.confに保存され、今後のCLIコマンドは日本語を使用します）" ;;
+    ko) pn_ok "한국어로 전환되었습니다 (ops.conf에 저장되며, 이후 CLI 명령어는 한국어를 사용합니다)" ;;
+    *)  pn_ok "Language set to English (saved to ops.conf, future CLI commands will use English)" ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -499,7 +509,7 @@ pn_wiz_summary() {
   printf '  %-16s %s\n' "$(pn_t 'Config File' '配置文件')" "$(pn_conf_path)"
   printf '  %-16s %s\n' "$(pn_t 'Log File' '日志文件')" "$(pn_log_file)"
   printf '  %-16s %s\n' "$(pn_t 'State Dir' '状态目录')" "$(pn_state_dir)"
-  printf '  %-16s %s\n' "$(pn_t 'Language' '提示语言')" "$(pn_is_zh && echo '简体中文 (zh)' || echo 'English (en)')"
+  printf '  %-16s %s\n' "$(pn_t 'Language' '提示语言' '表示言語' '표시 언어')" "$(case "$PN_OPS_LANG" in zh) echo '简体中文 (zh)';; ja) echo '日本語 (ja)';; ko) echo '한국어 (ko)';; *) echo 'English (en)';; esac)"
   printf '  %-16s %s\n' "$(pn_t 'Target Mode' '推送目标')" "$(pn_target_desc)"
   printf '  %-16s %s\n' "$(pn_t 'Metrics' '监控指标')" "$PN_OPS_METRICS"
   printf '  %-16s %s\n' "$(pn_t 'Templates' '卡片模版')" "$PN_OPS_REPORT_TEMPLATE · $(pn_t "Alert" "告警") $PN_OPS_ALERT_TEMPLATE"

@@ -37,21 +37,40 @@ pn_sev_marker() {
 }
 
 pn_sev_cn() {
-  if pn_is_zh; then
-    case "$1" in
-      crit) printf '严重' ;;
-      warn) printf '警告' ;;
-      na)   printf '未知' ;;
-      *)    printf '正常' ;;
-    esac
-  else
-    case "$1" in
-      crit) printf 'CRITICAL' ;;
-      warn) printf 'WARNING' ;;
-      na)   printf 'UNKNOWN' ;;
-      *)    printf 'OK' ;;
-    esac
-  fi
+  case "$(pn_lang)" in
+    zh)
+      case "$1" in
+        crit) printf '严重' ;;
+        warn) printf '警告' ;;
+        na)   printf '未知' ;;
+        *)    printf '正常' ;;
+      esac
+      ;;
+    ja)
+      case "$1" in
+        crit) printf '致命的' ;;
+        warn) printf '警告' ;;
+        na)   printf '不明' ;;
+        *)    printf '正常' ;;
+      esac
+      ;;
+    ko)
+      case "$1" in
+        crit) printf '심각' ;;
+        warn) printf '경고' ;;
+        na)   printf '알수없음' ;;
+        *)    printf '정상' ;;
+      esac
+      ;;
+    *)
+      case "$1" in
+        crit) printf 'CRITICAL' ;;
+        warn) printf 'WARNING' ;;
+        na)   printf 'UNKNOWN' ;;
+        *)    printf 'OK' ;;
+      esac
+      ;;
+  esac
 }
 
 pn_sev_emoji() {

@@ -41,8 +41,10 @@ pn_template_path() {
     "${XDG_DATA_HOME:-$HOME/.local/share}/pushnova-ops"; do
     [ -n "$base" ] || continue
     # Case 1: base has a templates/ subfolder
-    if pn_is_zh && [ -f "$base/templates/$name.zh.tpl" ]; then
-      printf '%s' "$base/templates/$name.zh.tpl"
+    local cur_lang
+    cur_lang=$(pn_lang)
+    if [ "$cur_lang" != "en" ] && [ -f "$base/templates/$name.$cur_lang.tpl" ]; then
+      printf '%s' "$base/templates/$name.$cur_lang.tpl"
       return 0
     fi
     if [ -f "$base/templates/$name.tpl" ]; then
@@ -50,8 +52,8 @@ pn_template_path() {
       return 0
     fi
     # Case 2: base is already the templates/ directory itself
-    if pn_is_zh && [ -f "$base/$name.zh.tpl" ]; then
-      printf '%s' "$base/$name.zh.tpl"
+    if [ "$cur_lang" != "en" ] && [ -f "$base/$name.$cur_lang.tpl" ]; then
+      printf '%s' "$base/$name.$cur_lang.tpl"
       return 0
     fi
     if [ -f "$base/$name.tpl" ]; then
@@ -133,7 +135,7 @@ pn_tpl_fill_common() {
   pn_tpl_val DATE "$(date '+%Y-%m-%d' 2>/dev/null)"
   pn_tpl_val OS "$(pn_os_pretty)"
   pn_tpl_val KERNEL "$(pn_kernel)"
-  pn_tpl_val UPTIME "$(pn_uptime_days) $(pn_t "days" "天")"
+  pn_tpl_val UPTIME "$(pn_uptime_days) $(pn_t "days" "天" "日" "일")"
   pn_tpl_val STATUS "$(pn_sev_cn "$overall")"
   pn_tpl_val STATUS_EMOJI "$(pn_sev_emoji "$overall")"
   pn_tpl_val SEVERITY "$(pn_sev_cn "$sev")"

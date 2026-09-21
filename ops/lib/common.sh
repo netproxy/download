@@ -11,17 +11,37 @@
 : "${PN_OPS_VERSION:=1.0.0}"
 : "${PN_OPS_NAME:=pushnova-ops}"
 
-pn_is_zh() {
-  case "${PN_OPS_LANG:-en}" in
-    zh|zh_*|zh-*|cn|CN) return 0 ;;
-    *) return 1 ;;
+pn_lang() {
+  case "${PN_OPS_LANG:-${LANG:-en}}" in
+    zh|zh_*|zh-*|cn|CN) echo "zh" ;;
+    ja|ja_*|ja-*|jp|JP) echo "ja" ;;
+    ko|ko_*|ko-*|kr|KR) echo "ko" ;;
+    *) echo "en" ;;
   esac
 }
 
+pn_is_zh() { [ "$(pn_lang)" = "zh" ]; }
+pn_is_ja() { [ "$(pn_lang)" = "ja" ]; }
+pn_is_ko() { [ "$(pn_lang)" = "ko" ]; }
+
 pn_t() {
-  # pn_t <en_string> <zh_string>
-  if pn_is_zh; then printf '%s' "$2"; else printf '%s' "$1"; fi
+  # pn_t <en_string> <zh_string> [ja_string] [ko_string]
+  local l
+  l=$(pn_lang)
+  case "$l" in
+    zh)
+      if [ $# -ge 2 ] && [ -n "$2" ]; then printf '%s' "$2"; return 0; fi
+      ;;
+    ja)
+      if [ $# -ge 3 ] && [ -n "$3" ]; then printf '%s' "$3"; return 0; fi
+      ;;
+    ko)
+      if [ $# -ge 4 ] && [ -n "$4" ]; then printf '%s' "$4"; return 0; fi
+      ;;
+  esac
+  printf '%s' "$1"
 }
+
 
 
 # ---------------------------------------------------------------------------

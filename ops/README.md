@@ -20,7 +20,19 @@ Sender Token -> Target Mode (Device / Topic / Group / Account) -> Select Metrics
 
 ## 1. Quick Installation
 
-### Remote One-Liner (Recommended)
+### Method A: NPM Package (Recommended for Windows / macOS / Linux)
+
+If you have Node.js (>=16) installed, you can install the cross-platform CLI globally or run it instantly without installation:
+
+```bash
+# Global installation (available as 'pushnova-ops' and 'pushnova')
+npm install -g pushnova
+
+# Or run instantly without installation
+npx pushnova-ops --help
+```
+
+### Method B: Remote Shell One-Liner (Linux / Bash)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/netproxy/download/main/ops/install.sh | bash

@@ -13,7 +13,7 @@
 #   Thresholds & Scheduler -> Pipeline Verification.
 #
 #   Options (Remaining arguments are forwarded to pushnova-ops install):
-#     --lang <en|zh>         Interface language (default en, or zh for Chinese)
+#     --lang <en|zh|ja|ko>   Interface language (default en, zh: Chinese, ja: Japanese, ko: Korean)
 #     --prefix <dir>         Installation directory, default /opt/pushnova-ops
 #     --bin-dir <dir>        Executable symlink directory, default /usr/local/bin
 #     --src-url <url>        Base URL for source files (for mirrors or air-gapped setups)
@@ -63,7 +63,15 @@ templates/storm.zh.tpl
 templates/metric.zh.tpl
 templates/table.zh.tpl
 templates/manual.zh.tpl
-templates/test.zh.tpl"
+templates/test.zh.tpl
+templates/standard.ja.tpl
+templates/alert.ja.tpl
+templates/recovery.ja.tpl
+templates/test.ja.tpl
+templates/standard.ko.tpl
+templates/alert.ko.tpl
+templates/recovery.ko.tpl
+templates/test.ko.tpl"
 
 # Optional files: download failure will not block installation
 OPTIONAL_FILES="README.md TUTORIAL.zh-CN.md"
