@@ -219,9 +219,11 @@ pn_notify_flush_spool() {
 }
 
 pn_notify_selftest() {
-  # Send a test notification
+  # Send a test notification (collect live metrics first so the
+  # STRUCTURED_TABLE card ships with a complete table, like reports)
   local template=${1:-test}
   local payload
+  pn_collect_all "${PN_OPS_METRICS:-load cpu mem disk net conn}" >/dev/null 2>&1 || true
   payload=$(pn_build_payload test "$template" "${PN_OPS_PRIORITY_REPORT:-NORMAL}") || return 1
   pn_notify_send "$payload" test
 }

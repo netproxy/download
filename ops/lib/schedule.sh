@@ -110,6 +110,12 @@ pn_cron_to_oncalendar() {
   esac
   case "$h" in
     \*/[0-9]*) printf '*-*-* 0/%s:00:00' "${h#*/}"; return 0 ;;
+    '*')
+      # every hour at minute m, e.g. "0 * * * *" -> "*-*-* *:00:00"
+      # (missing this branch used to fall through to 'daily')
+      case "$m" in ''|*[!0-9]*) m=0 ;; esac
+      printf '*-*-* *:%02d:00' "$((10#$m))"
+      return 0 ;;
     *[!0-9]*)  printf 'daily'; return 0 ;;
   esac
   case "$m" in

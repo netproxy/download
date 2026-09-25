@@ -20,6 +20,7 @@ pn_card_type() {
     rich)   echo RICH_MARKDOWN ;;
     metric) echo METRIC ;;
     table)  echo STRUCTURED_TABLE ;;
+    test)   echo STRUCTURED_TABLE ;;  # test 消息随附完整表格，与巡检报告一致
     storm)  echo STORM_FOLD ;;
     hitl)   echo HITL ;;
     *)      echo STANDARD ;;

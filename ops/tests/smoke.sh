@@ -170,6 +170,26 @@ assert_contains "zh report header in Chinese" "$out_zh" "核心指标清单"
 out_zh_test=$(PN_OPS_LANG=zh run_ops_fix "$FIX_OK" test $BASE_FLAGS --dry-run)
 assert_contains "zh test title in Chinese" "$out_zh_test" "PushNova Ops 链路测试通知"
 
+# --- Regression: test notification ships a full structured table (like reports) ---
+out_test=$(run_ops_fix "$FIX_OK" test $BASE_FLAGS --dry-run)
+assert_contains "test -> STRUCTURED_TABLE" "$out_test" '"type": "STRUCTURED_TABLE"'
+assert_contains "test carries table_json" "$out_test" '"table_json"'
+assert_not_contains "test template drops legacy plain-text LINES block" "$out_test" "Sample Metrics"
+
+# --- Regression: hourly cron must map to an hourly systemd timer, not daily ---
+# (bug: "0 * * * *" used to fall through to "daily", so hourly reports never ran)
+set -f
+. "$OPS_DIR/lib/schedule.sh"
+assert_eq() { # assert_eq <desc> <got> <want>
+  if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "got: $2 want: $3"; fi
+}
+assert_eq "cron '0 * * * *' -> hourly timer" "$(pn_cron_to_oncalendar '0 * * * *')" "*-*-* *:00:00"
+assert_eq "cron '30 * * * *' -> hourly timer at :30" "$(pn_cron_to_oncalendar '30 * * * *')" "*-*-* *:30:00"
+assert_eq "cron '0 9 * * *' stays daily 09:00" "$(pn_cron_to_oncalendar '0 9 * * *')" "*-*-* 9:0:00"
+assert_eq "cron '0 */6 * * *' stays every-6h" "$(pn_cron_to_oncalendar '0 */6 * * *')" "*-*-* 0/6:00:00"
+assert_eq "cron '*/5 * * * *' stays every-5m" "$(pn_cron_to_oncalendar '*/5 * * * *')" "*-*-* *:0/5:00"
+set +f
+
 # ---------------------------------------------------------------------------
 section "4. Target Addressing (Device / Topic / Group / Account)"
 out=$(run_ops_fix "$FIX_OK" report --api-key pn_ak_live_t --target-mode device --target pn_tok_live_test --metrics "load" --dry-run)
