@@ -324,7 +324,8 @@ pn_target_json_fields() {
   case "$mode" in
     device)
       [ -z "$t" ] && { pn_error "Target mode is 'device' but device token is not configured"; return 1; }
-      printf ',\n  "token": %s' "$(pn_json_str "$t")" ;;
+      # 2026-10-02: 单机直投用网关 to 字段；token 是鉴权凭据位，发 token 会被网关忽略目标并回退为账号广播。
+      printf ',\n  "to": %s' "$(pn_json_str "$t")" ;;
     topic)
       [ -z "$t" ] && { pn_error "Target mode is 'topic' but topic code is not configured"; return 1; }
       printf ',\n  "topic": %s' "$(pn_json_str "$t")" ;;

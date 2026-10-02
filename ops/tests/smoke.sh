@@ -193,7 +193,8 @@ set +f
 # ---------------------------------------------------------------------------
 section "4. Target Addressing (Device / Topic / Group / Account)"
 out=$(run_ops_fix "$FIX_OK" report --api-key pn_ak_live_t --target-mode device --target pn_tok_live_test --metrics "load" --dry-run)
-assert_contains "device mode contains token" "$out" '"token": "pn_tok_live_test"'
+assert_contains "device mode contains to field" "$out" '"to": "pn_tok_live_test"'
+assert_not_contains "device mode must not send token field" "$out" '"token": "pn_tok_live_test"'
 
 out=$(run_ops_fix "$FIX_OK" report --api-key pn_ak_live_t --target-mode group --target "Core Ops" --metrics "load" --dry-run)
 assert_contains "group mode contains group" "$out" '"group": "Core Ops"'
