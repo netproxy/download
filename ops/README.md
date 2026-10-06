@@ -84,7 +84,7 @@ The wizard supports both English and Simplified Chinese (defaults to English). S
 | --- | --- | --- |
 | 1 | **Language Selection** | English (default) or Simplified Chinese (`zh`); persists to `ops.conf` and switches all wizard steps & CLI outputs |
 | 2 | Environment Self-check | Verifies dependencies, root privileges, optional tools (`jq`, `openssl`, `ping`, `crontab`, `systemctl`) |
-| 3 | Gateway URL | Default `https://pushnova.ezcloud.ltd/v1`, or custom self-hosted endpoint |
+| 3 | Gateway URL | Default `https://pushnova.stream/v1`, or custom self-hosted endpoint |
 | 4 | **Sender Token** | PushNova Console "API Key", format: `pn_ak_live_...`; verifies online and displays account quota/devices |
 | 5 | **Target Mode** | Device unicast / Channel broadcast / Group multicast / Account broadcast; lists available targets automatically |
 | 6 | Metrics Selection | Multiple choice (Enter to accept recommended defaults), detailed below |
