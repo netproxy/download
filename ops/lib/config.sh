@@ -45,6 +45,13 @@ PN_OPS_QUOTA_ENABLED
 PN_OPS_LOG_LEVEL
 PN_OPS_LOG_MAX_KB
 PN_OPS_INSTALL_PREFIX
+PN_OPS_CALLBACK_ENABLED
+PN_OPS_CALLBACK_PORT
+PN_OPS_CALLBACK_TLS
+PN_OPS_CALLBACK_HOST
+PN_OPS_CALLBACK_TOKEN_TTL
+PN_OPS_CALLBACK_ACTIONS
+PN_OPS_CALLBACK_SERVICES
 EOF
 }
 
@@ -89,7 +96,7 @@ pn_conf_defaults() {
   cores=$(pn_cores)
 
   : "${PN_OPS_LANG:=en}"
-  : "${PN_OPS_GATEWAY:=https://pushnova.ezcloud.ltd/v1}"
+  : "${PN_OPS_GATEWAY:=https://pushnova.stream/v1}"
   : "${PN_OPS_API_KEY:=}"
   : "${PN_OPS_TARGET_MODE:=account}"      # device | topic | group | account
   : "${PN_OPS_TARGET:=}"
