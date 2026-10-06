@@ -1,0 +1,5 @@
+# PushNova Ops runtime artifacts (do not commit)
+smoke-result.log
+*.log
+.tmp/
+.dbg/
