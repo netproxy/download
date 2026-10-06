@@ -76,6 +76,8 @@ fi
 # shellcheck source=/dev/null
 . "$PN_LIB_DIR/config.sh"
 # shellcheck source=/dev/null
+. "$PN_LIB_DIR/callback.sh"
+# shellcheck source=/dev/null
 . "$PN_LIB_DIR/metrics.sh"
 # shellcheck source=/dev/null
 . "$PN_LIB_DIR/rules.sh"
@@ -134,7 +136,7 @@ $(pn_c bold '常用命令')
 $(pn_c bold '选项')
   --lang <en|zh|ja|ko>       界面语言 (en 英文 / zh 简体中文 / ja 日本語 / ko 한국어)
   --api-key <pn_ak_...>      发送者凭证 (API Key)
-  --gateway <url>            推送网关地址，默认 https://pushnova.ezcloud.ltd/v1
+  --gateway <url>            推送网关地址，默认 https://pushnova.stream/v1
   --target-mode <mode>       目标模式: device | topic | group | account
   --target <value>           设备 Token / 主题名 / 群组名
   --metrics "<list>"         监控指标列表，如 "load cpu mem disk"
@@ -195,7 +197,7 @@ $(pn_c bold 'コマンド')
 $(pn_c bold 'オプション')
   --lang <en|zh|ja|ko>       表示言語 (en 英語 / zh 中国語 / ja 日本語 / ko 韓国語)
   --api-key <pn_ak_...>      送信者認証キー (API Key)
-  --gateway <url>            プッシュゲートウェイURL (デフォルト: https://pushnova.ezcloud.ltd/v1)
+  --gateway <url>            プッシュゲートウェイURL (デフォルト: https://pushnova.stream/v1)
   --target-mode <mode>       送信モード: device | topic | group | account
   --target <value>           デバイストークン / トピック名 / グループ名
   --metrics "<list>"         監視対象メトリクス一覧 (例: "load cpu mem disk")
@@ -241,7 +243,7 @@ $(pn_c bold '주요 명령어')
 $(pn_c bold '옵션')
   --lang <en|zh|ja|ko>       표시 언어 (en 영어 / zh 중국어 / ja 일본어 / ko 한국어)
   --api-key <pn_ak_...>      발신 인증키 (API Key)
-  --gateway <url>            푸시 게이트웨이 주소 (기본값: https://pushnova.ezcloud.ltd/v1)
+  --gateway <url>            푸시 게이트웨이 주소 (기본값: https://pushnova.stream/v1)
   --target-mode <mode>       전송 모드: device | topic | group | account
   --target <value>           디바이스 토큰 / 토픽 이름 / 그룹 이름
   --metrics "<list>"         모니터링 대상 지표 목록 (예: "load cpu mem disk")
@@ -287,7 +289,7 @@ $(pn_c bold 'Commands')
 $(pn_c bold 'Options')
   --lang <en|zh|ja|ko>       Language (en English / zh Chinese / ja Japanese / ko Korean)
   --api-key <pn_ak_...>      Sender Token (API Key)
-  --gateway <url>            Gateway URL, default https://pushnova.ezcloud.ltd/v1
+  --gateway <url>            Gateway URL, default https://pushnova.stream/v1
   --target-mode <mode>       device | topic | group | account
   --target <value>           Device Token / Topic Name / Group Name
   --metrics "<list>"         Monitored metrics, e.g. "load cpu mem disk"
@@ -629,6 +631,20 @@ cmd_flush() {
   pn_notify_flush_spool
 }
 
+cmd_callback() {
+  # pushnova-ops callback <status|install|remove|start|stop|restart>
+  local sub="${1:-status}"
+  case "$sub" in
+    status)   pn_callback_status ;;
+    install)  pn_callback_install_service ;;
+    remove)   pn_callback_remove_service ;;
+    start)    pn_have systemctl && systemctl start pushnova-ops-callback.service || pn_error "systemctl not available" ;;
+    stop)     pn_have systemctl && systemctl stop pushnova-ops-callback.service || pn_error "systemctl not available" ;;
+    restart)  pn_have systemctl && systemctl restart pushnova-ops-callback.service || pn_error "systemctl not available" ;;
+    *) pn_error "$(pn_t "Unknown callback subcommand: $sub (status|install|remove|start|stop|restart)" "未知 callback 子命令: $sub")"; exit 2 ;;
+  esac
+}
+
 cmd_doctor() {
   local fails=0 warns=0
   pn_banner "$(pn_t "PushNova Ops Environment Diagnostics v$PN_OPS_VERSION" "PushNova Ops 环境与配置诊断 v$PN_OPS_VERSION")"
@@ -728,6 +744,7 @@ cmd_uninstall() {
     pn_confirm "$(pn_t "Are you sure you want to uninstall?" "确定要卸载 PushNova Ops 吗?")" n || { pn_info "$(pn_t "Cancelled" "已取消")"; return 0; }
   fi
   pn_schedule_remove
+  pn_callback_remove_service 2>/dev/null || true
   if [ "$PN_FLAG_PURGE" = "1" ]; then
     rm -rf "$(pn_state_dir)" 2>/dev/null || true
     rm -f "$(pn_conf_path)" 2>/dev/null || true
@@ -779,6 +796,7 @@ main() {
     logs|log)             cmd_logs "$@" ;;
     flush|resend)         cmd_flush ;;
     doctor|checkup)       cmd_doctor ;;
+    callback|cb)          cmd_callback "$@" ;;
     uninstall|remove)     cmd_uninstall ;;
     version|-V)           echo "$PN_OPS_NAME v$PN_OPS_VERSION" ;;
     help|-h|--help)       pn_usage ;;
