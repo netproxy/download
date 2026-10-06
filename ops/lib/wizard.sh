@@ -152,7 +152,7 @@ pn_wiz_language() {
 pn_wiz_gateway() {
   pn_wiz_step "$(pn_t "Step 3 · Gateway URL" "第 3 步 · 推送网关地址")"
   pn_wiz_note "$(pn_t "Default uses official gateway; self-hosted services can use http://your-host:8080/v1" "默认使用 PushNova 官方网关；私有部署可填写 http://your-host:8080/v1")"
-  pn_ask PN_OPS_GATEWAY "$(pn_t "PushNova Gateway" "PushNova 网关地址")" "${PN_OPS_GATEWAY:-https://pushnova.ezcloud.ltd/v1}"
+  pn_ask PN_OPS_GATEWAY "$(pn_t "PushNova Gateway" "PushNova 网关地址")" "${PN_OPS_GATEWAY:-https://pushnova.stream/v1}"
 }
 
 pn_wiz_token() {
@@ -391,7 +391,7 @@ pn_wiz_templates() {
   pn_wiz_step "$(pn_t "Step 9 · Notification Templates & Priorities" "第 9 步 · 通知模版与优先级设置")"
   pn_wiz_note "$(pn_t "Templates define mobile card layout: standard=Plain Text / rich=Markdown / metric=Telemetry Graph / table=Structured Table" "模版决定 App 端卡片呈现: standard=纯文本 / rich=Markdown富排版 / metric=遥测折线图 / table=结构化表格")"
   pn_wiz_note "$(pn_t "Alert template 'storm' enables fingerprint folding: repeated alerts refresh in place without spamming notifications" "告警模版 'storm' 支持指纹折叠: 同一故障反复告警时在 App 中原地刷新，避免刷屏")"
-  PN_OPS_REPORT_TEMPLATE=$(pn_choose "$(pn_t "Inspection report template" "巡检日报卡片模版")" 1 \
+  PN_OPS_REPORT_TEMPLATE=$(pn_choose "$(pn_t "Inspection report template" "巡检日报卡片模版")" 2 \
     "$(pn_t "standard Plain text summary (Recommended)" "standard 纯文本排版 (推荐)")" \
     "$(pn_t "rich Markdown layout (RICH_MARKDOWN card)" "rich Markdown 丰富排版 (RICH_MARKDOWN 卡片)")" \
     "$(pn_t "metric Telemetry metrics + Sparkline graph (METRIC card)" "metric 遥测图表 (METRIC 卡片，带折线趋势图)")" \
@@ -488,6 +488,40 @@ pn_wiz_preview() {
   return 0
 }
 
+
+# ---------------------------------------------------------------------------
+# 13. Callback Server (optional)
+# ---------------------------------------------------------------------------
+pn_wiz_callback() {
+  pn_wiz_step "$(pn_t "Step 13 · Callback Server (optional)" "第 13 步 · 回调服务器（可选）")"
+  pn_wiz_note "$(pn_t "Enable a local callback server so buttons in push notifications can trigger real actions (restart service, clean logs, ...). Disabled by default." "启用本地回调服务器，让推送消息里的按钮可以触发主机的真实操作（重启服务、清理日志等）。默认关闭。")"
+  if ! pn_confirm "$(pn_t "Enable callback server?" "是否启用回调服务器？")" n; then
+    PN_OPS_CALLBACK_ENABLED=0
+    return 0
+  fi
+  PN_OPS_CALLBACK_ENABLED=1
+  pn_ask PN_OPS_CALLBACK_PORT "$(pn_t "Listen port" "监听端口")" "19091"
+  if pn_confirm "$(pn_t "Enable TLS (self-signed cert, recommended for public IP)?" "是否启用 TLS（自签证书，公网建议开启）？")" y; then
+    PN_OPS_CALLBACK_TLS=1
+  else
+    PN_OPS_CALLBACK_TLS=0
+  fi
+  pn_ask PN_OPS_CALLBACK_TOKEN_TTL "$(pn_t "Token validity in seconds" "令牌有效期（秒）")" "86400"
+  pn_ask PN_OPS_CALLBACK_ACTIONS "$(pn_t "Enabled actions (comma-separated)" "启用的动作（逗号分隔）")" "ping,collect_diag,report_status,restart_service,reload_service,clean_logs,disk_cleanup"
+  pn_ask PN_OPS_CALLBACK_SERVICES "$(pn_t "Services allowed to restart/reload (comma-separated, empty=none)" "允许重启/重载的服务（逗号分隔，空=全部拒绝）")" ""
+  # 生成密钥并自检
+  local secret
+  secret="$(pn_callback_secret_ensure)" || { pn_error "$(pn_t "Failed to generate callback secret" "生成回调密钥失败")"; return 1; }
+  pn_ok "$(pn_t "Callback secret generated" "回调密钥已生成")"
+  # 自检：签发并验证一个测试 token
+  local tok parsed
+  tok="$(pn_callback_token_generate "selftest" "ping" '{}' 60)" || { pn_error "$(pn_t "Token self-test failed" "令牌自检失败")"; return 1; }
+  parsed="$(pn_callback_token_parse "$tok")" || { pn_error "$(pn_t "Token self-test failed" "令牌自检失败")"; return 1; }
+  pn_ok "$(pn_t "Token self-test passed" "令牌自检通过")"
+  pn_info "$(pn_t "Callback URL: " "回调地址: ")$(pn_callback_url)"
+  return 0
+}
+
 pn_wiz_finish() {
   pn_wiz_step "$(pn_t "Step 12 · Save Configuration & Install Scheduler" "第 12 步 · 保存配置与安装调度任务")"
   if ! pn_conf_write; then
@@ -499,6 +533,10 @@ pn_wiz_finish() {
     pn_schedule_install || pn_warn "$(pn_t "Scheduler installation failed, you can run manually: $PN_OPS_NAME cron install" "调度器安装未完全成功，可后续手动执行: $PN_OPS_NAME cron install")"
   else
     pn_info "$(pn_t "Skipping scheduler installation as requested" "按配置跳过定时调度安装")"
+  fi
+  # 回调服务器：启用则安装常驻服务
+  if pn_callback_enabled; then
+    pn_callback_install_service || pn_warn "$(pn_t "Callback service installation incomplete, run manually: $PN_OPS_NAME callback install" "回调服务安装未完全成功，可手动执行: $PN_OPS_NAME callback install")"
   fi
   return 0
 }
@@ -567,7 +605,7 @@ pn_wizard_run() {
       device|topic|group) [ -n "${PN_OPS_TARGET:-}" ] || { pn_error "$(pn_t "Target mode $PN_OPS_TARGET_MODE requires --target" "目标模式 $PN_OPS_TARGET_MODE 需要通过 --target 指定目标")"; return 1; } ;;
     esac
     [ -n "${PN_OPS_METRICS:-}" ] || PN_OPS_METRICS="load cpu mem disk net conn"
-    [ -n "${PN_OPS_REPORT_TEMPLATE:-}" ] || PN_OPS_REPORT_TEMPLATE=standard
+    [ -n "${PN_OPS_REPORT_TEMPLATE:-}" ] || PN_OPS_REPORT_TEMPLATE=rich
     [ -n "${PN_OPS_ALERT_TEMPLATE:-}" ] || PN_OPS_ALERT_TEMPLATE=storm
     [ -z "${PN_OPS_SCHEDULER:-}" ] && PN_OPS_SCHEDULER=auto
     pn_info "$(pn_t "Non-interactive config: target=$(pn_target_desc) · metrics=$PN_OPS_METRICS · templates=$PN_OPS_REPORT_TEMPLATE/$PN_OPS_ALERT_TEMPLATE" "非交互配置: 目标=$(pn_target_desc) · 指标=$PN_OPS_METRICS · 模版=$PN_OPS_REPORT_TEMPLATE/$PN_OPS_ALERT_TEMPLATE")"
@@ -586,6 +624,13 @@ pn_wizard_run() {
         pn_notify_send "$payload" test || pn_warn "$(pn_t "Test notification failed: check Token/Gateway/Network, or run $PN_OPS_NAME test later" "测试推送失败: 请检查 Token/网关/网络，稍后可执行 $PN_OPS_NAME test")"
       fi
     fi
+  fi
+
+  if [ "$noninteractive" = "0" ]; then
+    pn_wiz_callback || pn_warn "$(pn_t "Callback setup incomplete, you can enable later" "回调服务器配置未完成，稍后可手动启用")"
+  else
+    # 非交互模式：默认不启用，除非显式传入 PN_OPS_CALLBACK_ENABLED=1
+    [ -z "${PN_OPS_CALLBACK_ENABLED:-}" ] && PN_OPS_CALLBACK_ENABLED=0
   fi
 
   pn_wiz_finish || return 1
