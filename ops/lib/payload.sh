@@ -444,6 +444,8 @@ pn_fingerprint() {
 }
 
 pn_hitl_fields() {
+  # 设计铁律：未启用 callback server 时不渲染任何按钮（点了没反应不如不显示）
+  pn_callback_enabled || return 0
   # HITL approval buttons: PN_MANUAL_ACTIONS="APPROVE:Approve:PRIMARY,REJECT:Reject:DESTRUCTIVE"
   local spec=${PN_MANUAL_ACTIONS:-}
   [ -z "$spec" ] && spec="APPROVE:Acknowledge:PRIMARY,REJECT:Dismiss:DESTRUCTIVE"
@@ -469,4 +471,44 @@ pn_hitl_fields() {
   [ -n "${PN_MANUAL_TIMEOUT:-}" ] && out="$out,\n  \"timeout_seconds\": $(pn_json_num_or_zero "$PN_MANUAL_TIMEOUT")"
   [ -n "${PN_MANUAL_CALLBACK:-}" ] && out="$out,\n  \"callback_url\": $(pn_json_str "$PN_MANUAL_CALLBACK")"
   printf '%b' "$out"
+}
+
+# pn_callback_buttons <alert_id> <spec>
+#   生成带能力令牌的回调按钮数组（JSON）。
+#   spec 格式：action|label|params_json;action|label|params_json
+#   例：clean_logs|清理日志|{"days":7};collect_diag|抓取诊断包|{}
+#   未启用回调时输出空数组。
+pn_callback_buttons() {
+  local alert_id=$1 spec=$2
+  local out="" first=1 item action label params_json token cb_url ttl
+  pn_callback_enabled || { printf '[]'; return 0; }
+  [ -z "$spec" ] && { printf '[]'; return 0; }
+  cb_url="$(pn_callback_url)"
+  ttl="${PN_OPS_CALLBACK_TOKEN_TTL:-86400}"
+  out="["
+  local IFS_OLD=$IFS
+  IFS=';'
+  for item in $spec; do
+    IFS=$IFS_OLD
+    [ -n "$item" ] || { IFS=';'; continue; }
+    action=$(printf '%s' "$item" | cut -d'|' -f1)
+    label=$(printf '%s' "$item" | cut -d'|' -f2)
+    params_json=$(printf '%s' "$item" | cut -d'|' -f3-)
+    [ -n "$action" ] || { IFS=';'; continue; }
+    [ -n "$label" ] || label="$action"
+    [ -n "$params_json" ] || params_json="{}"
+    # 动作必须在白名单，否则跳过该按钮
+    pn_callback_action_allowed "$action" || { IFS=';'; continue; }
+    token="$(pn_callback_token_generate "$alert_id" "$action" "$params_json" "$ttl")" || { IFS=';'; continue; }
+    [ -n "$token" ] || { IFS=';'; continue; }
+    [ "$first" = "1" ] || out="$out,"
+    first=0
+    out="$out{\"key\": $(pn_json_str "$action"), \"label\": $(pn_json_str "$label"), \"style\": \"PRIMARY\","
+    out="$out \"callback\": {\"url\": $(pn_json_str "$cb_url"), \"action\": $(pn_json_str "$action"),"
+    out="$out \"token\": $(pn_json_str "$token"), \"params\": $params_json}}"
+    IFS=';'
+  done
+  IFS=$IFS_OLD
+  out="$out]"
+  printf '%s' "$out"
 }
