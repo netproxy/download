@@ -79,7 +79,7 @@ run_ops_fix() {
   PN_OPS_FIXTURE_DIR="$fix" bash "$PN" "$@" 2>&1
 }
 
-BASE_FLAGS="--api-key pn_ak_live_smoketest --gateway https://pushnova.ezcloud.ltd/v1 --target-mode topic --target ops_alerts"
+BASE_FLAGS="--api-key pn_ak_live_smoketest --gateway https://pushnova.stream/v1 --target-mode topic --target ops_alerts"
 METRICS_ALL="load cpu mem swap disk inode net conn proc temp uptime service port http ping cert log ntp smart container quota"
 METRICS_SMALL="load cpu mem disk"
 
