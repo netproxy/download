@@ -31,7 +31,7 @@
 ```
 ┌────────────────────┐   HTTPS POST    ┌──────────────────┐   推送     ┌──────────────┐
 │  被监控服务器       │  /v1/dispatch   │  Push-Nova 网关   │ ────────► │  手机 App     │
-│  pushnova-ops      │ ──────────────► │  (ezcloud 或自建) │           │  通知卡片     │
+│  pushnova-ops      │ ──────────────► │  (pushnova.stream 或自建) │           │  通知卡片     │
 │  (cron/systemd)    │                 └──────────────────┘            └──────────────┘
 └────────────────────┘
 ```
@@ -50,7 +50,7 @@
 
 ### 1.1 拿到「发信 API Key」
 
-打开 PushNova ([https://pushnova.ezcloud.ltd](https://pushnova.ezcloud.ltd)) 控制台 → 左侧菜单 **🔑 Developer API Key & Account Quota**（开发者 API Key 与账号配额），复制 **API Key**：
+打开 PushNova ([https://pushnova.stream](https://pushnova.stream)) 控制台 → 左侧菜单 **🔑 Developer API Key & Account Quota**（开发者 API Key 与账号配额），复制 **API Key**：
 
 ```
 pn_ak_live_xxxxxxxxxxxxxxxxxxxxxxxx
@@ -82,7 +82,7 @@ pn_ak_live_xxxxxxxxxxxxxxxxxxxxxxxx
 ### 1.3 确认服务器能访问网关
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' https://pushnova.ezcloud.ltd/v1/health
+curl -sS -o /dev/null -w '%{http_code}\n' https://pushnova.stream/v1/health
 ```
 
 *   期望输出 `200`。
@@ -288,7 +288,7 @@ pushnova-ops help | head -5  # 能看到 Usage / Commands（若已配置中文�
 ```rust
   Step 1 · Gateway URL
   Default uses official gateway; self-hosted services can use http://your-host:8080/v1
-  PushNova Gateway \[https://pushnova.ezcloud.ltd/v1]:
+  PushNova Gateway \[https://pushnova.stream/v1]:
 ```
 
 *   用官方网关：**直接回车**
@@ -789,7 +789,7 @@ pushnova-ops flush
 
 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- |
-| `PN_OPS_GATEWAY` | `https://pushnova.ezcloud.ltd/v1` | 网关地址 |
+| `PN_OPS_GATEWAY` | `https://pushnova.stream/v1` | 网关地址 |
 | `PN_OPS_API\_KEY` | 空 | 发信 API Key（`pn_ak_live_…`） |
 | `PN_OPS_TARGET\_MODE` | `account` | `device` / `topic` / `group` / `account` |
 | `PN_OPS_TARGET` | 空 | 设备 Token / 频道名 / 群组名（`account` 时留空） |
