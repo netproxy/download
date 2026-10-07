@@ -88,14 +88,15 @@ pn_sev_emoji() {
 pn_state_file() { printf '%s/alert.state' "$(pn_state_dir)"; }
 
 pn_st_get() {
-  # pn_st_get <key> <2=status|3=since|4=last_notify|5=count>
+  # pn_st_get <key> <2=status|3=since|4=last_notify|5=count|6=window_start|7=window_count>
   local f; f=$(pn_state_file)
   [ -f "$f" ] || { printf ''; return 0; }
   awk -F'\t' -v k="$1" -v c="$2" '$1 == k { print $c; exit }' "$f" 2>/dev/null
 }
 
 pn_st_set() {
-  # pn_st_set <key> <status> <since> <last_notify> <count>
+  # pn_st_set <key> <status> <since> <last_notify> <count> [window_start] [window_count]
+  # 字段 6/7 为 3 分钟滑动窗口计数（修复 storm_count 累计误报）；老状态文件缺列时读到空，按 0 处理
   local f tmp
   f=$(pn_state_file)
   local d; d=$(dirname "$f"); mkdir -p "$d" 2>/dev/null || true
@@ -105,7 +106,7 @@ pn_st_set() {
   else
     : >"$tmp"
   fi
-  printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "${3:-0}" "${4:-0}" "${5:-0}" >>"$tmp"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "${3:-0}" "${4:-0}" "${5:-0}" "${6:-0}" "${7:-0}" >>"$tmp"
   mv "$tmp" "$f" 2>/dev/null || true
 }
 
@@ -223,15 +224,31 @@ EOF
 
 pn_rules_decide() {
   # pn_rules_decide <key> <sev> <label> <detail> <now> <repeat_sec>
+  # storm_count 语义：3 分钟滑动窗口内的发生次数（非累计）。window 字段见 pn_st_set。
   local key=$1 sev=$2 label=$3 detail=$4 now=$5 repeat_sec=$6
-  local prev prev_since prev_last prev_count since last count
+  local prev prev_since prev_last prev_count prev_wstart prev_wcount since last count wstart wcount
   prev=$(pn_st_get "$key" 2)
   prev_since=$(pn_st_get "$key" 3)
   prev_last=$(pn_st_get "$key" 4)
   prev_count=$(pn_st_get "$key" 5)
+  prev_wstart=$(pn_st_get "$key" 6)
+  prev_wcount=$(pn_st_get "$key" 7)
   case "$prev_since" in ''|*[!0-9]*) prev_since=0 ;; esac
   case "$prev_last" in ''|*[!0-9]*) prev_last=0 ;; esac
   case "$prev_count" in ''|*[!0-9]*) prev_count=0 ;; esac
+  case "$prev_wstart" in ''|*[!0-9]*) prev_wstart=0 ;; esac
+  case "$prev_wcount" in ''|*[!0-9]*) prev_wcount=0 ;; esac
+
+  # 3 分钟窗口计数：窗口过期则重置
+  pn_window_count() {
+    # pn_window_count <now> <prev_wstart> <prev_wcount> -> 输出 "wstart wcount"
+    local n=$1 ws=$2 wc=$3
+    if [ $((n - ws)) -gt 180 ] || [ "$ws" -le 0 ]; then
+      printf '%s %s' "$n" "1"
+    else
+      printf '%s %s' "$ws" "$((wc + 1))"
+    fi
+  }
 
   if pn_sev_bad "$sev"; then
     if pn_sev_bad "$prev"; then
@@ -239,25 +256,30 @@ pn_rules_decide() {
       count=$prev_count; [ "$count" -le 0 ] && count=1
       if [ $((now - prev_last)) -ge "$repeat_sec" ]; then
         count=$((count + 1))
-        pn_decision_record REPEAT "$sev" "$key" "$label" "$detail" "$count"
+        read -r wstart wcount <<EOF
+$(pn_window_count "$now" "$prev_wstart" "$prev_wcount")
+EOF
+        pn_decision_record REPEAT "$sev" "$key" "$label" "$detail" "$wcount"
         last=$now
       else
         last=$prev_last
+        wstart=$prev_wstart; wcount=$prev_wcount
       fi
-      pn_st_set "$key" "$sev" "$since" "$last" "$count"
+      pn_st_set "$key" "$sev" "$since" "$last" "$count" "$wstart" "$wcount"
     else
       since=$now; last=$now; count=1
-      pn_decision_record ALERT "$sev" "$key" "$label" "$detail" "$count"
-      pn_st_set "$key" "$sev" "$since" "$last" "$count"
+      wstart=$now; wcount=1
+      pn_decision_record ALERT "$sev" "$key" "$label" "$detail" "$wcount"
+      pn_st_set "$key" "$sev" "$since" "$last" "$count" "$wstart" "$wcount"
     fi
   else
     if pn_sev_bad "$prev"; then
       if pn_bool "${PN_OPS_NOTIFY_RECOVERY:-1}"; then
         pn_decision_record RECOVERY "$sev" "$key" "$label" "$detail" "$prev_count"
       fi
-      pn_st_set "$key" "ok" "$prev_since" "0" "0"
+      pn_st_set "$key" "ok" "$prev_since" "0" "0" "0" "0"
     else
-      pn_st_set "$key" "$sev" "${prev_since:-0}" "0" "0"
+      pn_st_set "$key" "$sev" "${prev_since:-0}" "0" "0" "0" "0"
     fi
   fi
   return 0
