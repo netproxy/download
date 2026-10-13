@@ -649,8 +649,9 @@ m_http() {
     pn_emit_chk http "HTTP Availability" na "No probe URLs configured"
     return 0
   fi
-  local url res code t max=0
+  local url res code t max=0 slowest="" n=0
   for url in $PN_OPS_HTTP_URLS; do
+    n=$((n+1))
     if [ "${PN_OPS_MOCK:-0}" = "1" ]; then
       code=200; t=0.1
     else
@@ -660,7 +661,7 @@ m_http() {
     fi
     local ms
     ms=$(awk -v v="${t:-0}" 'BEGIN{ printf "%.0f", v*1000 }')
-    awk -v a="$ms" -v b="$max" 'BEGIN{ exit !(a>b) }' && max=$ms
+    if awk -v a="$ms" -v b="$max" 'BEGIN{ exit !(a>b) }'; then max=$ms; slowest=$url; fi
     case "$code" in
       2*|3*) pn_emit_chk "http:$url" "HTTP $url" ok "HTTP $code · ${ms}ms" ;;
       4*)    pn_emit_chk "http:$url" "HTTP $url" warn "HTTP $code (client error / auth failure) ·  ${ms}ms" ;;
@@ -668,7 +669,7 @@ m_http() {
       *)     pn_emit_chk "http:$url" "HTTP $url" crit "HTTP $code · ${ms}ms" ;;
     esac
   done
-  pn_emit_num http_latency "HTTP Latency" "$max" "ms" "Maximum response time across all probe URLs"
+  pn_emit_num http_latency "HTTP Latency" "$max" "ms" "Slowest of ${n} URLs: ${slowest:-n/a}"
 }
 
 m_ping() {
@@ -676,8 +677,9 @@ m_ping() {
     pn_emit_chk ping "Host Reachability" na "No probe hosts configured or ping command missing"
     return 0
   fi
-  local h out ms max=0
+  local h out ms max=0 slowest="" n=0
   for h in $PN_OPS_PING_HOSTS; do
+    n=$((n+1))
     if [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
       out=$(ping -c 1 -t 3 "$h" 2>/dev/null || true)
     else
@@ -688,10 +690,10 @@ m_ping() {
       pn_emit_chk "ping:$h" "Ping $h" crit "Unreachable (100% packet loss)"
     else
       pn_emit_chk "ping:$h" "Ping $h" ok "${ms} ms"
-      awk -v a="$ms" -v b="$max" 'BEGIN{ exit !(a>b) }' && max=$ms
+      if awk -v a="$ms" -v b="$max" 'BEGIN{ exit !(a>b) }'; then max=$ms; slowest=$h; fi
     fi
   done
-  pn_emit_num ping_latency "Ping Latency" "$max" "ms" "Maximum RTT across all probe hosts"
+  pn_emit_num ping_latency "Ping Latency" "$max" "ms" "Slowest of ${n} hosts: ${slowest:-n/a}"
 }
 
 # ---------------------------------------------------------------------------
