@@ -3,4 +3,4 @@
 {{SUMMARY}}
 {{FINDINGS}}
 
-Time {{TIME}} · Occurrence #{{COUNT}} · Fingerprint {{FINGERPRINT}}
+Time {{TIME}} · {{COUNT}} occurrence(s) in the last 3 min · Fingerprint {{FINGERPRINT}}
