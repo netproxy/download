@@ -379,7 +379,6 @@ pn_df_rows() {
       # Filter pseudo filesystems
       if (fs ~ /^(tmpfs|devtmpfs|overlay|shm|none|udev|ramfs|squashfs|cgroup|systemd-1)$/) next;
       if (mount ~ /^\/(proc|sys|dev|run)(\/|$)/) next;
-      if (fs ~ /^\/(proc|sys|dev)/) next;
       gsub(/%/, "", pct);
       if (pct !~ /^[0-9.]+$/) next;
       if (mode == "inode") printf "%s\t%s\t%s\t%s\n", pct, mount, "-", "-";
